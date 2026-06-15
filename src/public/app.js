@@ -173,10 +173,13 @@ function taskListBody(project) {
 }
 
 function cardBody(project) {
-  if (project.threads.length === 0) {
-    return '<div class="group-empty">セッションはありません</div>';
-  }
-  return `<div class="card-grid" data-pid="${project.id}">${project.threads.map(agentCard).join("")}</div>`;
+  const empty = project.threads.length === 0;
+  // 空でも .card-grid を必ず描画する。空だと Sortable のドロップ先が
+  // 存在せず、カードをこのプロジェクトへ移動できなくなるため。
+  const inner = empty
+    ? '<div class="group-empty">セッションはありません</div>'
+    : project.threads.map(agentCard).join("");
+  return `<div class="card-grid${empty ? " is-empty" : ""}" data-pid="${project.id}">${inner}</div>`;
 }
 
 function group(project) {
@@ -275,47 +278,61 @@ async function onDragEnd() {
   }
 }
 
+// DnD 共通オプション。
+// - forceFallback: ネイティブ HTML5 DnD はドラッグ中にマウスホイールを
+//   ブロックするため、Sortable 独自のフォールバック drag に切り替える。
+//   これでドラッグ中もページのホイールスクロールがそのまま効く。
+// - scroll / scrollSensitivity / scrollSpeed: AutoScroll プラグイン。
+//   ポインタを画面端 (上端含む) に当てると自動でスクロールする。
+const DND_COMMON = {
+  animation: 120,
+  ghostClass: "dragging",
+  forceFallback: true,
+  fallbackOnBody: true,
+  scroll: true,
+  scrollSensitivity: 90,
+  scrollSpeed: 14,
+  bubbleScroll: true,
+  // 背の高い要素を、より短い末尾要素の下へ落とせるようにする
+  // (デフォルトの swapThreshold だと末尾への drop が閾値を越えられない)。
+  invertSwap: true,
+  onStart: onDragStart,
+  onEnd: onDragEnd,
+};
+
 function initSortables() {
   destroySortables();
   sortables.push(
     Sortable.create(projectsEl, {
+      ...DND_COMMON,
       handle: ".group-head",
       draggable: ".group",
       filter: ".group-actions, .count-badge",
       preventOnFilter: false,
-      animation: 120,
-      ghostClass: "dragging",
-      onStart: onDragStart,
-      onEnd: onDragEnd,
+      direction: "vertical",
     }),
   );
   for (const grid of projectsEl.querySelectorAll(".card-grid")) {
     sortables.push(
       Sortable.create(grid, {
+        ...DND_COMMON,
         group: "threads",
         draggable: ".agent-card",
         handle: ".ac-top",
         filter: ".ac-del, .ac-status, .inline-edit",
         preventOnFilter: false,
-        animation: 120,
-        ghostClass: "dragging",
-        onStart: onDragStart,
-        onEnd: onDragEnd,
       }),
     );
   }
   for (const list of projectsEl.querySelectorAll(".task-list")) {
     sortables.push(
       Sortable.create(list, {
+        ...DND_COMMON,
         group: "threads",
         draggable: ".task-item",
         handle: ".task-item",
         filter: ".task-check, .task-star, .task-expand, .inline-edit",
         preventOnFilter: false,
-        animation: 120,
-        ghostClass: "dragging",
-        onStart: onDragStart,
-        onEnd: onDragEnd,
       }),
     );
   }

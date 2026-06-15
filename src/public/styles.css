@@ -398,6 +398,13 @@ button {
 .group.dragging {
   opacity: 0.5;
 }
+/* forceFallback 時にポインタを追従するクローン */
+.sortable-fallback {
+  opacity: 0.9 !important;
+  cursor: grabbing;
+  box-shadow: 5px 5px 0 var(--ink);
+  pointer-events: none;
+}
 .group-head {
   display: flex;
   align-items: center;
@@ -506,6 +513,14 @@ button {
   .card-grid {
     grid-template-columns: 1fr;
   }
+}
+/* 空プロジェクトでもカードを落とせるよう、ドロップ領域を確保する */
+.card-grid.is-empty {
+  display: block;
+  min-height: 56px;
+}
+.card-grid.is-empty .group-empty {
+  padding: 16px 4px;
 }
 .agent-card {
   position: relative;

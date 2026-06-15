@@ -84,6 +84,9 @@ function serveStatic(res, pathname) {
     const ext = path.extname(filePath).toLowerCase();
     res.writeHead(200, {
       "content-type": MIME[ext] ?? "application/octet-stream",
+      // ローカルツール。古い app.js / styles.css がブラウザにキャッシュされて
+      // 「直したのに反映されない」を防ぐため常に再取得させる。
+      "cache-control": "no-store",
     });
     res.end(data);
   });
