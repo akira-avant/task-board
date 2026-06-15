@@ -24,6 +24,17 @@
     <dialog id="card-dialog" class="dialog">
       <form id="card-form" method="dialog">
         <h2 id="card-dialog-title">カードを追加</h2>
+        <fieldset id="layout-field" class="layout-field">
+          <legend>表示形式</legend>
+          <label class="radio">
+            <input type="radio" name="layout" value="card" checked />
+            カード
+          </label>
+          <label class="radio">
+            <input type="radio" name="layout" value="inline" />
+            インライン (To Do 形式)
+          </label>
+        </fieldset>
         <label>
           プロジェクト
           <input id="f-project" name="project" list="project-list" required

@@ -9,6 +9,7 @@ import {
   pruneEmptyProjects,
   reorder,
   updateProject,
+  updateThread,
   upsertThread,
 } from "./src/lib/board.mjs";
 import { getDb } from "./src/lib/db.mjs";
@@ -16,6 +17,7 @@ import {
   parsePostThread,
   parseReorder,
   parseUpdateProject,
+  parseUpdateThread,
 } from "./src/lib/validate.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -139,6 +141,28 @@ async function handleApi(req, res, pathname) {
       return;
     }
     pruneEmptyProjects(db);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "PATCH" && threadMatch) {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: "invalid JSON" });
+      return;
+    }
+    const parsed = parseUpdateThread(body);
+    if (parsed.error) {
+      sendJson(res, 400, { error: parsed.error });
+      return;
+    }
+    const updated = updateThread(db, Number(threadMatch[1]), parsed.data);
+    if (!updated) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
     sendJson(res, 200, { ok: true });
     return;
   }

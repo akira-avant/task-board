@@ -6,6 +6,7 @@ import {
   getBoard,
   reorder,
   updateProject,
+  updateThread,
   upsertThread,
 } from "../src/lib/board.mjs";
 import { createInMemoryDb } from "../src/lib/db.mjs";
@@ -79,6 +80,43 @@ describe("board", () => {
     const id = getBoard(db)[0].id;
     updateProject(db, id, { collapsed: true });
     assert.equal(getBoard(db)[0].collapsed, true);
+  });
+
+  it("新規スレッドの done/starred は false", () => {
+    const t = post(db, { project: "p", thread: "t" });
+    assert.equal(t.done, false);
+    assert.equal(t.starred, false);
+  });
+
+  it("updateThread で done / starred をトグルできる", () => {
+    const t = post(db, { project: "p", thread: "t", current: "x" });
+    updateThread(db, t.id, { done: true, starred: true });
+    const after = getBoard(db)[0].threads[0];
+    assert.equal(after.done, true);
+    assert.equal(after.starred, true);
+    assert.equal(after.current, "x"); // 他フィールドは保持
+  });
+
+  it("再 Post で done はリセットされない", () => {
+    const t = post(db, { project: "p", thread: "t" });
+    updateThread(db, t.id, { done: true });
+    post(db, { project: "p", thread: "t", current: "updated" });
+    assert.equal(getBoard(db)[0].threads[0].done, true);
+  });
+
+  it("layout は新規 Post で設定でき、デフォルトは card", () => {
+    post(db, { project: "card_p", thread: "t" });
+    post(db, { project: "inline_p", thread: "t", layout: "inline" });
+    const byName = Object.fromEntries(getBoard(db).map((p) => [p.name, p]));
+    assert.equal(byName.card_p.layout, "card");
+    assert.equal(byName.inline_p.layout, "inline");
+  });
+
+  it("updateProject で layout を変更できる", () => {
+    post(db, { project: "p", thread: "t" });
+    const id = getBoard(db)[0].id;
+    updateProject(db, id, { layout: "inline" });
+    assert.equal(getBoard(db)[0].layout, "inline");
   });
 
   it("reorder でカードを別プロジェクトへ移動し順序を更新する", () => {

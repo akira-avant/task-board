@@ -27,23 +27,26 @@ function toThread(row) {
     current: row.current,
     next: row.next,
     memo: row.memo,
+    done: row.done === 1,
+    starred: row.starred === 1,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
   };
 }
 
+const THREAD_COLUMNS =
+  "id, project_id, thread_key, port, current, next, memo, done, starred, sort_order, updated_at";
+
 /** @returns {Project[]} */
 export function getBoard(db) {
   const projectRows = db
     .prepare(
-      "SELECT id, name, sort_order, collapsed FROM projects ORDER BY sort_order, id",
+      "SELECT id, name, sort_order, collapsed, layout FROM projects ORDER BY sort_order, id",
     )
     .all();
 
   const threadRows = db
-    .prepare(
-      "SELECT id, project_id, thread_key, port, current, next, memo, sort_order, updated_at FROM threads ORDER BY sort_order, id",
-    )
+    .prepare(`SELECT ${THREAD_COLUMNS} FROM threads ORDER BY sort_order, id`)
     .all();
 
   const byProject = new Map();
@@ -58,23 +61,33 @@ export function getBoard(db) {
     name: p.name,
     sortOrder: p.sort_order,
     collapsed: p.collapsed === 1,
+    layout: p.layout ?? "card",
     threads: byProject.get(p.id) ?? [],
   }));
 }
 
-function ensureProject(db, name) {
+function ensureProject(db, name, layout) {
   const existing = db
     .prepare("SELECT id FROM projects WHERE name = ?")
     .get(name);
   if (existing) {
+    // 既存プロジェクトの layout は明示指定があれば更新する
+    if (layout) {
+      db.prepare("UPDATE projects SET layout = ? WHERE id = ?").run(
+        layout,
+        existing.id,
+      );
+    }
     return existing.id;
   }
   const maxOrder = db
     .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM projects")
     .get();
   const info = db
-    .prepare("INSERT INTO projects (name, sort_order) VALUES (?, ?)")
-    .run(name, maxOrder.m + 1);
+    .prepare(
+      "INSERT INTO projects (name, sort_order, layout) VALUES (?, ?, ?)",
+    )
+    .run(name, maxOrder.m + 1, layout ?? "card");
   return Number(info.lastInsertRowid);
 }
 
@@ -83,7 +96,7 @@ function ensureProject(db, name) {
  * @returns {Thread}
  */
 export function upsertThread(db, input) {
-  const projectId = ensureProject(db, input.project);
+  const projectId = ensureProject(db, input.project, input.layout);
 
   const existing = db
     .prepare("SELECT id FROM threads WHERE project_id = ? AND thread_key = ?")
@@ -118,10 +131,39 @@ export function upsertThread(db, input) {
 
   const row = db
     .prepare(
-      "SELECT id, project_id, thread_key, port, current, next, memo, sort_order, updated_at FROM threads WHERE project_id = ? AND thread_key = ?",
+      `SELECT ${THREAD_COLUMNS} FROM threads WHERE project_id = ? AND thread_key = ?`,
     )
     .get(projectId, input.thread);
   return toThread(row);
+}
+
+/** id 指定でスレッドの一部フィールドを更新 (done/starred トグル、編集)。 */
+export function updateThread(db, id, patch) {
+  const map = {
+    done: (v) => (v ? 1 : 0),
+    starred: (v) => (v ? 1 : 0),
+    port: (v) => v ?? null,
+    current: (v) => v ?? null,
+    next: (v) => v ?? null,
+    memo: (v) => v ?? null,
+  };
+  const sets = [];
+  const values = [];
+  for (const [key, conv] of Object.entries(map)) {
+    if (patch[key] !== undefined) {
+      sets.push(`${key} = ?`);
+      values.push(conv(patch[key]));
+    }
+  }
+  if (sets.length === 0) {
+    return false;
+  }
+  sets.push("updated_at = datetime('now')");
+  values.push(id);
+  const info = db
+    .prepare(`UPDATE threads SET ${sets.join(", ")} WHERE id = ?`)
+    .run(...values);
+  return info.changes > 0;
 }
 
 export function deleteThread(db, id) {
@@ -145,6 +187,10 @@ export function updateProject(db, id, patch) {
   if (patch.name !== undefined) {
     sets.push("name = ?");
     values.push(patch.name);
+  }
+  if (patch.layout !== undefined) {
+    sets.push("layout = ?");
+    values.push(patch.layout);
   }
   if (sets.length === 0) {
     return false;

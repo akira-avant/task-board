@@ -244,7 +244,10 @@ body {
   padding: 8px;
 }
 
-.project.collapsed .thread-grid {
+.project.collapsed .thread-grid,
+.project.collapsed .todo-list,
+.project.collapsed .todo-done-toggle,
+.project.collapsed .todo-done-list {
   display: none;
 }
 
@@ -458,4 +461,202 @@ body {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+.layout-field {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px 8px;
+  margin: 0;
+  display: flex;
+  gap: 16px;
+}
+
+.layout-field legend {
+  font-size: 11px;
+  color: var(--fg-faint);
+  padding: 0 4px;
+}
+
+.radio {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.radio input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* ===== インライン (To Do) 形式 ===== */
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 8px;
+}
+
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.todo-row:hover {
+  background: var(--hover);
+}
+
+.todo-row.dragging {
+  opacity: 0.5;
+}
+
+.todo-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.todo-check svg {
+  opacity: 0;
+}
+
+.todo-row.done .todo-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.todo-row.done .todo-check svg {
+  opacity: 1;
+}
+
+.todo-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-title {
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.todo-row.done .todo-title {
+  text-decoration: line-through;
+  color: var(--fg-faint);
+}
+
+.todo-sub {
+  font-size: 11px;
+  color: var(--fg-faint);
+  margin-top: 1px;
+}
+
+.todo-sub .mono {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+.todo-star {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.todo-row:hover .todo-star {
+  opacity: 1;
+}
+
+.todo-star.on {
+  opacity: 1;
+  color: #e0a91b;
+}
+
+.todo-star.on svg {
+  fill: #e0a91b;
+}
+
+.todo-add {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  margin-top: 2px;
+}
+
+.todo-add .plus {
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--accent);
+  display: inline-flex;
+  justify-content: center;
+}
+
+.todo-add input {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+}
+
+.todo-add input::placeholder {
+  color: var(--fg-faint);
+}
+
+.todo-add input:focus {
+  outline: none;
+}
+
+.todo-done-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 8px 0;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  color: var(--fg-soft);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.todo-done-toggle:hover {
+  background: var(--hover);
+}
+
+.todo-done-toggle svg {
+  transition: transform 0.12s;
+}
+
+.todo-done-toggle.collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.todo-done-list.collapsed {
+  display: none;
 }

@@ -6,6 +6,7 @@ const cardDialog = document.getElementById("card-dialog");
 const cardForm = document.getElementById("card-form");
 const cardTitle = document.getElementById("card-dialog-title");
 const cardError = document.getElementById("card-error");
+const layoutField = document.getElementById("layout-field");
 const projectList = document.getElementById("project-list");
 const fProject = document.getElementById("f-project");
 const fThread = document.getElementById("f-thread");
@@ -18,10 +19,14 @@ const projectDialog = document.getElementById("project-dialog");
 const projectForm = document.getElementById("project-form");
 const pName = document.getElementById("p-name");
 
+const JSON_H = { "content-type": "application/json" };
+
 let dragging = false;
 let dialogOpen = false;
+let dialogMode = "add";
 let board = [];
 const sortables = [];
+const doneCollapsed = new Set(); // 「完了」セクションを畳んでいる project id
 
 function escapeHtml(s) {
   return String(s)
@@ -31,12 +36,9 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-// SQLite datetime('now') は UTC "YYYY-MM-DD HH:MM:SS"。相対表現で返す。
 function relativeTime(sqliteUtc) {
   const then = new Date(`${sqliteUtc.replace(" ", "T")}Z`).getTime();
-  if (Number.isNaN(then)) {
-    return "";
-  }
+  if (Number.isNaN(then)) return "";
   const sec = Math.round((Date.now() - then) / 1000);
   if (sec < 5) return "今";
   if (sec < 60) return `${sec}秒前`;
@@ -55,12 +57,22 @@ const PENCIL =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const PLUS =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
+const CHECK =
+  '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg>';
+const STAR =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.9 6.6 20.5l1-6.1L3.2 10l6.1-.9z"/></svg>';
+const LIST_ICON =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+const GRID_ICON =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
 
 const FIELDS = [
   ["current", "Current"],
   ["next", "Next"],
   ["memo", "Memo"],
 ];
+
+// ---- カード形式 ----
 
 function fieldRow(thread, key, label) {
   const v = thread[key];
@@ -89,25 +101,75 @@ function threadCard(thread) {
     </div>`;
 }
 
-function projectRow(project) {
+function cardBody(project) {
   const cards =
     project.threads.length === 0
       ? '<p class="field-value empty" style="grid-column:1/-1;margin:0">カードなし</p>'
       : project.threads.map(threadCard).join("");
+  return `<div class="thread-grid" data-pid="${project.id}">${cards}</div>`;
+}
+
+// ---- インライン (To Do) 形式 ----
+
+function todoRow(t) {
+  const title = t.current && t.current.trim() ? t.current : t.threadKey;
+  const subs = [];
+  if (t.port) subs.push(`<span class="mono">:${t.port}</span>`);
+  if (t.next) subs.push(`→ ${escapeHtml(t.next)}`);
+  const sub = subs.length ? `<div class="todo-sub">${subs.join(" ")}</div>` : "";
+  return `
+    <div class="todo-row${t.done ? " done" : ""}" data-tid="${t.id}">
+      <button class="todo-check" type="button" aria-label="完了切替" data-tid="${t.id}">${CHECK}</button>
+      <div class="todo-main">
+        <div class="todo-title">${escapeHtml(title)}</div>
+        ${sub}
+      </div>
+      <button class="todo-star${t.starred ? " on" : ""}" type="button" aria-label="重要" data-tid="${t.id}">${STAR}</button>
+    </div>`;
+}
+
+function inlineBody(project) {
+  const active = project.threads.filter((t) => !t.done);
+  const done = project.threads.filter((t) => t.done);
+  const collapsed = doneCollapsed.has(project.id);
+  let html = `<div class="todo-list" data-pid="${project.id}">`;
+  html += active.map(todoRow).join("");
+  html += `
+    <div class="todo-add" data-pid="${project.id}">
+      <span class="plus">${PLUS}</span>
+      <input type="text" placeholder="+ タスクの追加" autocomplete="off" aria-label="タスクの追加" />
+    </div>`;
+  html += `</div>`;
+  if (done.length) {
+    html += `<button class="todo-done-toggle${collapsed ? " collapsed" : ""}" type="button" data-pid="${project.id}">${CHEVRON} 完了 ${done.length}</button>`;
+    html += `<div class="todo-done-list${collapsed ? " collapsed" : ""}" data-pid="${project.id}" style="padding:0 8px 8px">${done.map(todoRow).join("")}</div>`;
+  }
+  return html;
+}
+
+// ---- プロジェクト行 ----
+
+function projectRow(project) {
+  const layout = project.layout || "card";
+  const body = layout === "inline" ? inlineBody(project) : cardBody(project);
+  const toggleIcon = layout === "card" ? LIST_ICON : GRID_ICON;
+  const toggleLabel =
+    layout === "card" ? "インライン表示に切替" : "カード表示に切替";
   const name = escapeHtml(project.name);
   return `
-    <section class="project${project.collapsed ? " collapsed" : ""}" data-pid="${project.id}">
+    <section class="project${project.collapsed ? " collapsed" : ""}" data-pid="${project.id}" data-layout="${layout}">
       <div class="proj-header">
         <button class="proj-toggle" type="button" aria-label="開閉" data-pid="${project.id}">${CHEVRON}</button>
         <span class="proj-name" title="ドラッグで並べ替え">${name}</span>
         <span class="proj-count">${project.threads.length}</span>
         <div class="proj-actions">
           <button class="icon-btn proj-add" type="button" aria-label="カード追加" data-pname="${name}">${PLUS}</button>
+          <button class="icon-btn proj-layout" type="button" aria-label="${toggleLabel}" title="${toggleLabel}" data-pid="${project.id}" data-layout="${layout}">${toggleIcon}</button>
           <button class="icon-btn proj-rename" type="button" aria-label="名前変更" data-pid="${project.id}" data-pname="${name}">${PENCIL}</button>
           <button class="icon-btn danger proj-del" type="button" aria-label="プロジェクト削除" data-pid="${project.id}" data-pname="${name}">${TRASH}</button>
         </div>
       </div>
-      <div class="thread-grid" data-pid="${project.id}">${cards}</div>
+      ${body}
     </section>`;
 }
 
@@ -121,6 +183,8 @@ function emptyState() {
        "port":3000,"current":"作業中の内容"}'</pre>
     </div>`;
 }
+
+// ---- DnD ----
 
 function destroySortables() {
   while (sortables.length) {
@@ -137,7 +201,7 @@ function collectOrder() {
   const threads = [];
   for (const el of projectEls) {
     const pid = Number(el.dataset.pid);
-    el.querySelectorAll(".thread-grid > .thread-card").forEach((c, i) => {
+    el.querySelectorAll(".thread-card, .todo-row").forEach((c, i) => {
       threads.push({ id: Number(c.dataset.tid), projectId: pid, sortOrder: i });
     });
   }
@@ -147,7 +211,7 @@ function collectOrder() {
 async function persistOrder() {
   await fetch("/api/board/reorder", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_H,
     body: JSON.stringify(collectOrder()),
   });
 }
@@ -177,17 +241,17 @@ function initSortables() {
       onEnd: onDragEnd,
     }),
   );
-  // カードは上部バー (.card-head) 全体を掴める。編集/削除ボタンの上では
-  // ドラッグを開始せず通常クリックを通す (filter + preventOnFilter:false)。
-  // プロジェクト並べ替えと同じネイティブ DnD。group 共有で別プロジェクトへも移動可。
-  for (const grid of projectsEl.querySelectorAll(".thread-grid")) {
+  // カードグリッド (.thread-grid) と To Do の active リスト (.todo-list) の両方を
+  // 同じ group にして、列内・プロジェクト間・形式跨ぎの移動を可能にする。
+  for (const c of projectsEl.querySelectorAll(".thread-grid, .todo-list")) {
+    const isTodo = c.classList.contains("todo-list");
     sortables.push(
-      Sortable.create(grid, {
+      Sortable.create(c, {
         group: "threads",
-        handle: ".card-head",
-        filter: ".card-edit, .card-del",
+        draggable: isTodo ? ".todo-row" : ".thread-card",
+        handle: isTodo ? ".todo-row" : ".card-head",
+        filter: isTodo ? ".todo-check, .todo-star" : ".card-edit, .card-del",
         preventOnFilter: false,
-        draggable: ".thread-card",
         animation: 120,
         ghostClass: "dragging",
         onStart: onDragStart,
@@ -215,7 +279,7 @@ async function load() {
   render(board);
 }
 
-// ---- ダイアログ (追加 / 編集 / リネーム) ----
+// ---- ダイアログ ----
 
 function fillProjectList() {
   projectList.innerHTML = board
@@ -224,17 +288,21 @@ function fillProjectList() {
 }
 
 function openCardDialog(mode, data = {}) {
+  dialogMode = mode;
   cardError.hidden = true;
   fillProjectList();
   const editing = mode === "edit";
   cardTitle.textContent = editing ? "カードを編集" : "カードを追加";
+  layoutField.hidden = editing; // 表示形式はプロジェクト単位なので追加時のみ
+  const layout = data.layout ?? "card";
+  const radio = cardForm.querySelector(`input[name=layout][value="${layout}"]`);
+  if (radio) radio.checked = true;
   fProject.value = data.project ?? "";
   fThread.value = data.thread ?? "";
   fPort.value = data.port ?? "";
   fCurrent.value = data.current ?? "";
   fNext.value = data.next ?? "";
   fMemo.value = data.memo ?? "";
-  // 編集時は upsert キー (project, thread) を固定する
   fProject.disabled = editing;
   fThread.disabled = editing;
   dialogOpen = true;
@@ -259,9 +327,12 @@ async function submitCard(e) {
     next: fNext.value,
     memo: fMemo.value,
   };
+  if (dialogMode === "add") {
+    payload.layout = cardForm.querySelector("input[name=layout]:checked").value;
+  }
   const res = await fetch("/api/threads", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: JSON_H,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -289,11 +360,25 @@ async function submitProject(e) {
   if (!name) return;
   await fetch(`/api/projects/${pid}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: JSON_H,
     body: JSON.stringify({ name }),
   });
   projectDialog.close();
   await load();
+}
+
+function openEditFor(id) {
+  const project = board.find((p) => p.threads.some((t) => t.id === id));
+  const t = project?.threads.find((x) => x.id === id);
+  if (!t) return;
+  openCardDialog("edit", {
+    project: project.name,
+    thread: t.threadKey,
+    port: t.port ?? "",
+    current: t.current ?? "",
+    next: t.next ?? "",
+    memo: t.memo ?? "",
+  });
 }
 
 // ---- イベント配線 ----
@@ -317,7 +402,7 @@ projectsEl.addEventListener("click", async (e) => {
     section.classList.toggle("collapsed", collapsed);
     await fetch(`/api/projects/${toggle.dataset.pid}`, {
       method: "PATCH",
-      headers: { "content-type": "application/json" },
+      headers: JSON_H,
       body: JSON.stringify({ collapsed }),
     });
     return;
@@ -325,7 +410,20 @@ projectsEl.addEventListener("click", async (e) => {
 
   const add = e.target.closest(".proj-add");
   if (add) {
-    openCardDialog("add", { project: add.dataset.pname });
+    const proj = board.find((p) => p.name === add.dataset.pname);
+    openCardDialog("add", { project: add.dataset.pname, layout: proj?.layout });
+    return;
+  }
+
+  const layoutBtn = e.target.closest(".proj-layout");
+  if (layoutBtn) {
+    const next = layoutBtn.dataset.layout === "card" ? "inline" : "card";
+    await fetch(`/api/projects/${layoutBtn.dataset.pid}`, {
+      method: "PATCH",
+      headers: JSON_H,
+      body: JSON.stringify({ layout: next }),
+    });
+    await load();
     return;
   }
 
@@ -350,19 +448,7 @@ projectsEl.addEventListener("click", async (e) => {
 
   const edit = e.target.closest(".card-edit");
   if (edit) {
-    const id = Number(edit.dataset.tid);
-    const project = board.find((p) => p.threads.some((t) => t.id === id));
-    const thread = project?.threads.find((t) => t.id === id);
-    if (thread) {
-      openCardDialog("edit", {
-        project: project.name,
-        thread: thread.threadKey,
-        port: thread.port ?? "",
-        current: thread.current ?? "",
-        next: thread.next ?? "",
-        memo: thread.memo ?? "",
-      });
-    }
+    openEditFor(Number(edit.dataset.tid));
     return;
   }
 
@@ -371,13 +457,90 @@ projectsEl.addEventListener("click", async (e) => {
     del.closest(".thread-card").remove();
     await fetch(`/api/threads/${del.dataset.tid}`, { method: "DELETE" });
     await load();
+    return;
+  }
+
+  // ---- インライン (To Do) ----
+  const check = e.target.closest(".todo-check");
+  if (check) {
+    const row = check.closest(".todo-row");
+    const done = !row.classList.contains("done");
+    row.classList.toggle("done", done);
+    await fetch(`/api/threads/${check.dataset.tid}`, {
+      method: "PATCH",
+      headers: JSON_H,
+      body: JSON.stringify({ done }),
+    });
+    await load();
+    return;
+  }
+
+  const star = e.target.closest(".todo-star");
+  if (star) {
+    const on = !star.classList.contains("on");
+    star.classList.toggle("on", on);
+    await fetch(`/api/threads/${star.dataset.tid}`, {
+      method: "PATCH",
+      headers: JSON_H,
+      body: JSON.stringify({ starred: on }),
+    });
+    await load();
+    return;
+  }
+
+  const doneToggle = e.target.closest(".todo-done-toggle");
+  if (doneToggle) {
+    const pid = Number(doneToggle.dataset.pid);
+    if (doneCollapsed.has(pid)) doneCollapsed.delete(pid);
+    else doneCollapsed.add(pid);
+    doneToggle.classList.toggle("collapsed");
+    const list = projectsEl.querySelector(
+      `.todo-done-list[data-pid="${pid}"]`,
+    );
+    if (list) list.classList.toggle("collapsed");
+    return;
+  }
+
+  const row = e.target.closest(".todo-row");
+  if (row) {
+    openEditFor(Number(row.dataset.tid));
   }
 });
 
+// インラインのクイック追加 (Enter)
+projectsEl.addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  const input = e.target.closest(".todo-add input");
+  if (!input) return;
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  const pid = Number(input.closest(".todo-add").dataset.pid);
+  const project = board.find((p) => p.id === pid);
+  if (!project) return;
+  input.value = "";
+  await fetch("/api/threads", {
+    method: "POST",
+    headers: JSON_H,
+    body: JSON.stringify({
+      project: project.name,
+      thread: `t-${Math.random().toString(36).slice(2, 8)}`,
+      current: text,
+      layout: "inline",
+    }),
+  });
+  await load();
+  // 連続入力のため同じ追加欄にフォーカスを戻す
+  const again = projectsEl.querySelector(`.todo-add[data-pid="${pid}"] input`);
+  if (again) again.focus();
+});
+
 setInterval(() => {
-  if (!dragging && !dialogOpen) {
-    load();
-  }
+  if (dragging || dialogOpen) return;
+  // 追加欄に入力中はポーリング再描画でフォームを潰さない
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest(".todo-add")) return;
+  load();
 }, 5000);
 
 load();

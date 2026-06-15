@@ -17,6 +17,8 @@ function intOrNull(v) {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
 }
 
+const LAYOUTS = new Set(["card", "inline"]);
+
 export function parsePostThread(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return { error: "body must be a JSON object" };
@@ -29,6 +31,13 @@ export function parsePostThread(body) {
   if (!thread) {
     return { error: "thread は必須です" };
   }
+  let layout;
+  if (body.layout !== undefined) {
+    if (!LAYOUTS.has(body.layout)) {
+      return { error: "layout は card か inline" };
+    }
+    layout = body.layout;
+  }
   return {
     data: {
       project,
@@ -37,8 +46,36 @@ export function parsePostThread(body) {
       current: trimOrNull(body.current),
       next: trimOrNull(body.next),
       memo: trimOrNull(body.memo),
+      layout,
     },
   };
+}
+
+export function parseUpdateThread(body) {
+  if (typeof body !== "object" || body === null) {
+    return { error: "body must be a JSON object" };
+  }
+  const patch = {};
+  for (const key of ["done", "starred"]) {
+    if (body[key] !== undefined) {
+      if (typeof body[key] !== "boolean") {
+        return { error: `${key} must be boolean` };
+      }
+      patch[key] = body[key];
+    }
+  }
+  if (body.port !== undefined) {
+    patch.port = intOrNull(body.port);
+  }
+  for (const key of ["current", "next", "memo"]) {
+    if (body[key] !== undefined) {
+      patch[key] = trimOrNull(body[key]);
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return { error: "更新するフィールドがありません" };
+  }
+  return { data: patch };
 }
 
 export function parseUpdateProject(body) {
@@ -58,6 +95,12 @@ export function parseUpdateProject(body) {
       return { error: "name must be a non-empty string" };
     }
     patch.name = name;
+  }
+  if (body.layout !== undefined) {
+    if (!LAYOUTS.has(body.layout)) {
+      return { error: "layout は card か inline" };
+    }
+    patch.layout = body.layout;
   }
   return { data: patch };
 }

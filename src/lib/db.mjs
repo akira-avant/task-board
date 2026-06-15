@@ -5,6 +5,14 @@ import { DatabaseSync } from "node:sqlite";
 const DB_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DB_DIR, "board.db");
 
+// 既存テーブルに列が無ければ追加する (軽量マイグレーション)。
+function ensureColumn(db, table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
 /** @param {DatabaseSync} db */
 export function initSchema(db) {
   db.exec(`
@@ -15,6 +23,7 @@ export function initSchema(db) {
       name        TEXT NOT NULL UNIQUE,
       sort_order  INTEGER NOT NULL DEFAULT 0,
       collapsed   INTEGER NOT NULL DEFAULT 0,
+      layout      TEXT NOT NULL DEFAULT 'card',
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -27,6 +36,8 @@ export function initSchema(db) {
       current     TEXT,
       next        TEXT,
       memo        TEXT,
+      done        INTEGER NOT NULL DEFAULT 0,
+      starred     INTEGER NOT NULL DEFAULT 0,
       sort_order  INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -35,6 +46,11 @@ export function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
   `);
+
+  // 既存 DB 向けマイグレーション (新規 DB では CREATE 時点で存在)
+  ensureColumn(db, "projects", "layout", "layout TEXT NOT NULL DEFAULT 'card'");
+  ensureColumn(db, "threads", "done", "done INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "threads", "starred", "starred INTEGER NOT NULL DEFAULT 0");
 }
 
 /** @returns {DatabaseSync} */
