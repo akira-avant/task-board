@@ -29,13 +29,14 @@ function toThread(row) {
     memo: row.memo,
     done: row.done === 1,
     starred: row.starred === 1,
+    status: row.status ?? "run",
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
   };
 }
 
 const THREAD_COLUMNS =
-  "id, project_id, thread_key, port, current, next, memo, done, starred, sort_order, updated_at";
+  "id, project_id, thread_key, port, current, next, memo, done, starred, status, sort_order, updated_at";
 
 /** @returns {Project[]} */
 export function getBoard(db) {
@@ -105,9 +106,17 @@ export function upsertThread(db, input) {
   if (existing) {
     db.prepare(
       `UPDATE threads
-       SET port = ?, current = ?, next = ?, memo = ?, updated_at = datetime('now')
+       SET port = ?, current = ?, next = ?, memo = ?,
+           status = COALESCE(?, status), updated_at = datetime('now')
        WHERE id = ?`,
-    ).run(input.port, input.current, input.next, input.memo, existing.id);
+    ).run(
+      input.port,
+      input.current,
+      input.next,
+      input.memo,
+      input.status ?? null,
+      existing.id,
+    );
   } else {
     const maxOrder = db
       .prepare(
@@ -116,8 +125,8 @@ export function upsertThread(db, input) {
       .get(projectId);
     db.prepare(
       `INSERT INTO threads
-         (project_id, thread_key, port, current, next, memo, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (project_id, thread_key, port, current, next, memo, status, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       projectId,
       input.thread,
@@ -125,6 +134,7 @@ export function upsertThread(db, input) {
       input.current,
       input.next,
       input.memo,
+      input.status ?? "run",
       maxOrder.m + 1,
     );
   }
@@ -224,6 +234,7 @@ export function updateThread(db, id, patch) {
   const map = {
     done: (v) => (v ? 1 : 0),
     starred: (v) => (v ? 1 : 0),
+    status: (v) => v,
     port: (v) => v ?? null,
     current: (v) => v ?? null,
     next: (v) => v ?? null,

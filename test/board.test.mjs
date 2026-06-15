@@ -105,6 +105,23 @@ describe("board", () => {
     assert.equal(getBoard(db)[0].threads[0].done, true);
   });
 
+  it("新規スレッドの status はデフォルト run", () => {
+    assert.equal(post(db, { project: "p", thread: "t" }).status, "run");
+  });
+
+  it("status を Post で設定でき、再 Post で省略すると維持される", () => {
+    post(db, { project: "p", thread: "t", status: "wait" });
+    assert.equal(getBoard(db)[0].threads[0].status, "wait");
+    post(db, { project: "p", thread: "t", current: "更新" });
+    assert.equal(getBoard(db)[0].threads[0].status, "wait");
+  });
+
+  it("updateThread で status を変更できる", () => {
+    const t = post(db, { project: "p", thread: "t" });
+    updateThread(db, t.id, { status: "done" });
+    assert.equal(getBoard(db)[0].threads[0].status, "done");
+  });
+
   it("layout は新規 Post で設定でき、デフォルトは card", () => {
     post(db, { project: "card_p", thread: "t" });
     post(db, { project: "inline_p", thread: "t", layout: "inline" });

@@ -3,27 +3,70 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>task-board</title>
+    <title>AIタスクボード</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-name">task-board</span>
-        <span class="brand-port">:8111</span>
+      <div class="brand-lockup">
+        <svg class="brand-mark" viewBox="0 0 64 64" width="42" height="42" aria-hidden="true">
+          <defs>
+            <filter id="bm-rough" x="-5%" y="-5%" width="110%" height="110%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="6" />
+              <feDisplacementMap in="SourceGraphic" scale="0.8" />
+            </filter>
+          </defs>
+          <g filter="url(#bm-rough)" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="13" y="13" width="30" height="40" rx="3" fill="#fff" />
+            <path d="M 24 11 h 8 a 2 2 0 0 1 2 2 v 3 h -12 v -3 a 2 2 0 0 1 2 -2 Z" fill="var(--ink)" />
+            <path d="M 19 27 l 2.4 2.4 l 4 -5" stroke="var(--red)" stroke-width="2.2" />
+            <line x1="28" y1="27" x2="38" y2="27" />
+            <path d="M 19 36 l 2.4 2.4 l 4 -5" stroke="var(--red)" stroke-width="2.2" />
+            <line x1="28" y1="36" x2="38" y2="36" />
+            <line x1="19" y1="46" x2="33" y2="46" />
+            <g stroke="var(--red)" stroke-width="2">
+              <path d="M 49 20 v 9 M 44.5 24.5 h 9" />
+              <path d="M 53 33 v 5 M 50.5 35.5 h 5" />
+            </g>
+          </g>
+        </svg>
+        <div>
+          <div class="app-name">AIタスクボード</div>
+          <div class="tagline">for agents who ship</div>
+        </div>
       </div>
-      <div class="topbar-actions">
-        <span class="hint">5秒ごとに自動更新</span>
-        <button id="add-btn" class="btn btn-primary" type="button">
-          + カード追加
-        </button>
+      <nav class="topnav">
+        <a class="current">ボード</a>
+      </nav>
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input id="search-input" type="text" placeholder="セッション・タスクを検索" autocomplete="off" />
       </div>
+      <button id="live-pill" class="live-pill" type="button" title="自動更新の一時停止 / 再開">
+        <span class="dot"></span>
+        <span class="stamp">最終更新 —</span>
+      </button>
+      <button id="add-btn" class="btn primary" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+        タスク追加
+      </button>
     </header>
-    <main id="projects" class="projects" aria-live="polite"></main>
+
+    <main class="page">
+      <div class="board-intro">
+        <div class="board-legend">
+          <span class="legend-item"><span class="sw run"></span>実行中</span>
+          <span class="legend-item"><span class="sw wait"></span>待機</span>
+          <span class="legend-item"><span class="sw done"></span>完了</span>
+        </div>
+      </div>
+      <div id="projects" aria-live="polite"></div>
+    </main>
 
     <dialog id="card-dialog" class="dialog">
       <form id="card-form" method="dialog">
-        <h2 id="card-dialog-title">カードを追加</h2>
+        <h2 id="card-dialog-title">タスクを追加</h2>
         <fieldset id="layout-field" class="layout-field">
           <legend>表示形式</legend>
           <label class="radio">
@@ -32,7 +75,7 @@
           </label>
           <label class="radio">
             <input type="radio" name="layout" value="inline" />
-            インライン (To Do 形式)
+            インライン (To Do)
           </label>
         </fieldset>
         <label>
@@ -66,7 +109,7 @@
         <p id="card-error" class="dialog-error" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" data-close>キャンセル</button>
-          <button type="submit" class="btn btn-primary" id="card-submit">保存</button>
+          <button type="submit" class="btn primary" id="card-submit">保存</button>
         </div>
       </form>
     </dialog>
@@ -80,7 +123,7 @@
         </label>
         <div class="dialog-actions">
           <button type="button" class="btn" data-close>キャンセル</button>
-          <button type="submit" class="btn btn-primary">変更</button>
+          <button type="submit" class="btn primary">変更</button>
         </div>
       </form>
     </dialog>

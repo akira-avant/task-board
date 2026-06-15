@@ -38,6 +38,7 @@ export function initSchema(db) {
       memo        TEXT,
       done        INTEGER NOT NULL DEFAULT 0,
       starred     INTEGER NOT NULL DEFAULT 0,
+      status      TEXT NOT NULL DEFAULT 'run',
       sort_order  INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -51,6 +52,7 @@ export function initSchema(db) {
   ensureColumn(db, "projects", "layout", "layout TEXT NOT NULL DEFAULT 'card'");
   ensureColumn(db, "threads", "done", "done INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "threads", "starred", "starred INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "threads", "status", "status TEXT NOT NULL DEFAULT 'run'");
 }
 
 /** @returns {DatabaseSync} */

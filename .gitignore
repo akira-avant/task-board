@@ -11,6 +11,10 @@
 
 # cogmem local (スキル追跡 DB 等、マシンローカル)
 /memory/
+**/memory/
+*.db
+*.db-shm
+*.db-wal
 
 # autostart VBS はマシン固有の絶対パスを含むため共有しない (skill が再生成する)
 tools/autostart-*.vbs

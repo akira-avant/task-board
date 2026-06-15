@@ -18,6 +18,7 @@ function intOrNull(v) {
 }
 
 const LAYOUTS = new Set(["card", "inline"]);
+const STATUSES = new Set(["run", "wait", "done"]);
 
 export function parsePostThread(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -38,6 +39,13 @@ export function parsePostThread(body) {
     }
     layout = body.layout;
   }
+  let status;
+  if (body.status !== undefined) {
+    if (!STATUSES.has(body.status)) {
+      return { error: "status は run / wait / done" };
+    }
+    status = body.status;
+  }
   return {
     data: {
       project,
@@ -47,6 +55,7 @@ export function parsePostThread(body) {
       next: trimOrNull(body.next),
       memo: trimOrNull(body.memo),
       layout,
+      status,
     },
   };
 }
@@ -63,6 +72,12 @@ export function parseUpdateThread(body) {
       }
       patch[key] = body[key];
     }
+  }
+  if (body.status !== undefined) {
+    if (!STATUSES.has(body.status)) {
+      return { error: "status は run / wait / done" };
+    }
+    patch.status = body.status;
   }
   if (body.port !== undefined) {
     patch.port = intOrNull(body.port);
