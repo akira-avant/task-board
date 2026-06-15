@@ -51,16 +51,14 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
         タスク追加
       </button>
+      <div class="board-legend">
+        <span class="legend-item"><span class="sw run"></span>実行中</span>
+        <span class="legend-item"><span class="sw wait"></span>待機</span>
+        <span class="legend-item"><span class="sw done"></span>完了</span>
+      </div>
     </header>
 
     <main class="page">
-      <div class="board-intro">
-        <div class="board-legend">
-          <span class="legend-item"><span class="sw run"></span>実行中</span>
-          <span class="legend-item"><span class="sw wait"></span>待機</span>
-          <span class="legend-item"><span class="sw done"></span>完了</span>
-        </div>
-      </div>
       <div id="projects" aria-live="polite"></div>
     </main>
 

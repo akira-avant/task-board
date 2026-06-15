@@ -29,6 +29,7 @@ let board = [];
 const sortables = [];
 const doneCollapsed = new Set();
 const expandedRows = new Set();
+const cardExpanded = new Set();
 
 function escapeHtml(s) {
   return String(s)
@@ -84,22 +85,32 @@ function kvValue(field, v) {
   return `<span class="${cls}" data-tid-field="${field}">${inner}</span>`;
 }
 
+function cardExtra(t) {
+  const row = (field, label, v) => {
+    const empty = v == null || v === "";
+    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="multi">${empty ? "—" : escapeHtml(String(v))}</span>`;
+  };
+  return `<div class="ac-extra">
+    ${row("next", "Next", t.next)}
+    ${row("memo", "Memo", t.memo)}
+  </div>`;
+}
+
 function agentCard(t) {
   const status = statusOf(t);
   const port = t.port ? `:${t.port}` : "—";
+  const open = cardExpanded.has(t.id);
   return `
     <div class="agent-card" data-tid="${t.id}">
       <div class="ac-top">
-        <span class="port-tag"><span class="port">${escapeHtml(port)}</span><span class="sess">${escapeHtml(t.threadKey)}</span></span>
         <span class="ac-status ${status}" title="クリックで状態変更 (実行中→待機→完了)"><span class="d"></span>${STATUS_LABEL[status]}</span>
+        <span class="port-tag"><span class="port">${escapeHtml(port)}</span><span class="sess">${escapeHtml(t.threadKey)}</span></span>
         <span class="ac-time">${relativeTime(t.updatedAt)}</span>
         <button class="ac-del" type="button" aria-label="削除" data-del="${t.id}">${TRASH}</button>
       </div>
-      <div class="ac-kv" data-tid="${t.id}">
-        <div class="k cur">Current</div>${kvValue("current", t.current)}
-        <div class="k">Next</div>${kvValue("next", t.next)}
-        <div class="k">Memo</div>${kvValue("memo", t.memo)}
-      </div>
+      <div class="ac-main">${kvValue("current", t.current)}</div>
+      <button class="ac-more${open ? " open" : ""}" type="button" data-more="${t.id}"><span class="tw">${CHEV_RIGHT}</span>Next・Memo</button>
+      ${open ? cardExtra(t) : ""}
     </div>`;
 }
 
@@ -179,13 +190,13 @@ function group(project) {
       <div class="group-head">
         <span class="twist">${CHEV_DOWN}</span>
         <span class="gname" title="ドラッグで並べ替え">${name}</span>
-        <span class="count-badge">${project.threads.length}</span>
         <div class="group-actions">
           <button class="twirl proj-add" type="button" aria-label="タスク追加" title="タスク追加" data-pname="${name}">${PLUS}</button>
           <button class="twirl proj-layout" type="button" aria-label="${toggleLabel}" title="${toggleLabel}" data-pid="${project.id}" data-layout="${layout}">${toggleIcon}</button>
           <button class="twirl proj-rename" type="button" aria-label="名前変更" title="名前変更" data-pid="${project.id}" data-pname="${name}">${PENCIL}</button>
           <button class="twirl danger proj-del" type="button" aria-label="削除" title="プロジェクト削除" data-pid="${project.id}" data-pname="${name}">${TRASH}</button>
         </div>
+        <span class="count-badge">${project.threads.length}</span>
       </div>
       <div class="group-body">${body}</div>
     </section>`;
@@ -268,8 +279,10 @@ function initSortables() {
   destroySortables();
   sortables.push(
     Sortable.create(projectsEl, {
-      handle: ".gname",
+      handle: ".group-head",
       draggable: ".group",
+      filter: ".group-actions, .count-badge",
+      preventOnFilter: false,
       animation: 120,
       ghostClass: "dragging",
       onStart: onDragStart,
@@ -542,6 +555,14 @@ projectsEl.addEventListener("click", async (e) => {
       STATUS_ORDER.find((s) => statusBtn.classList.contains(s)) || "run";
     const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % 3];
     await patchThread(id, { status: next });
+    return;
+  }
+  const more = e.target.closest(".ac-more");
+  if (more) {
+    const id = Number(more.dataset.more);
+    if (cardExpanded.has(id)) cardExpanded.delete(id);
+    else cardExpanded.add(id);
+    render(board);
     return;
   }
   const check = e.target.closest(".task-check");
