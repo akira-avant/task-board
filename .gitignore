@@ -1,0 +1,27 @@
+# dependencies (このアプリは依存ゼロだが、将来 npm install した場合に備えて)
+/node_modules
+
+# build artifacts (旧 Next.js の残骸など)
+/.next/
+/out/
+/build
+
+# local sqlite database
+/data/
+
+# cogmem local (スキル追跡 DB 等、マシンローカル)
+/memory/
+
+# autostart VBS はマシン固有の絶対パスを含むため共有しない (skill が再生成する)
+tools/autostart-*.vbs
+
+# misc
+.DS_Store
+npm-debug.log*
+
+# env files
+.env*
+
+# dev server logs / 一時ファイル
+.claude-dev/
+/tmp/

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>task-board</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-name">task-board</span>
+        <span class="brand-port">:8111</span>
+      </div>
+      <div class="topbar-actions">
+        <span class="hint">5秒ごとに自動更新</span>
+        <button id="add-btn" class="btn btn-primary" type="button">
+          + カード追加
+        </button>
+      </div>
+    </header>
+    <main id="projects" class="projects" aria-live="polite"></main>
+
+    <dialog id="card-dialog" class="dialog">
+      <form id="card-form" method="dialog">
+        <h2 id="card-dialog-title">カードを追加</h2>
+        <label>
+          プロジェクト
+          <input id="f-project" name="project" list="project-list" required
+            autocomplete="off" placeholder="例: benchmark_app" />
+          <datalist id="project-list"></datalist>
+        </label>
+        <label>
+          スレッド
+          <input id="f-thread" name="thread" required autocomplete="off"
+            placeholder="例: main" />
+        </label>
+        <label>
+          ポート <span class="opt">(任意)</span>
+          <input id="f-port" name="port" type="number" min="1" autocomplete="off"
+            placeholder="例: 3000" />
+        </label>
+        <label>
+          Current <span class="opt">(任意)</span>
+          <textarea id="f-current" name="current" rows="2"></textarea>
+        </label>
+        <label>
+          Next <span class="opt">(任意)</span>
+          <textarea id="f-next" name="next" rows="2"></textarea>
+        </label>
+        <label>
+          Memo <span class="opt">(任意)</span>
+          <textarea id="f-memo" name="memo" rows="2"></textarea>
+        </label>
+        <p id="card-error" class="dialog-error" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close>キャンセル</button>
+          <button type="submit" class="btn btn-primary" id="card-submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="project-dialog" class="dialog">
+      <form id="project-form" method="dialog">
+        <h2>プロジェクト名を変更</h2>
+        <label>
+          名前
+          <input id="p-name" name="name" required autocomplete="off" />
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close>キャンセル</button>
+          <button type="submit" class="btn btn-primary">変更</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/vendor/Sortable.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

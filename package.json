@@ -1,0 +1,16 @@
+{
+  "name": "task-board",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "エージェント進捗ボード — node:http + node:sqlite の単一プロセス、依存ゼロ",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "test": "node --test",
+    "seed": "node tools/seed_dev.mjs"
+  }
+}
