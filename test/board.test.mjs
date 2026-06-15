@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  ARCHIVE_PROJECT_NAME,
   deleteProject,
   deleteThread,
   getBoard,
@@ -127,6 +128,68 @@ describe("board", () => {
     const p2After = getBoard(db).find((p) => p.name === "p2");
     assert.equal(p2After.threads.length, 2);
     assert.equal(p2After.threads.find((t) => t.id === a.id).sortOrder, 5);
+  });
+
+  it("同じ port の古いカードは Post 時に「削除済み」へ寄せられる", () => {
+    // 旧 worktree のカード (port 3111)
+    post(db, { project: "benchmark_app", thread: "old-wt", port: 3111 });
+    // 同じ port を使い回した新しい worktree の Post
+    post(db, { project: "benchmark_app", thread: "new-wt", port: 3111 });
+
+    const byName = Object.fromEntries(getBoard(db).map((p) => [p.name, p]));
+    // 新カードは元プロジェクトに残る
+    const bench = byName.benchmark_app.threads.map((t) => t.threadKey);
+    assert.deepEqual(bench, ["new-wt"]);
+    // 旧カードは退避先に「元プロジェクト名/threadKey」で移動
+    const archive = byName[ARCHIVE_PROJECT_NAME];
+    assert.ok(archive, "削除済みプロジェクトが作られる");
+    assert.equal(archive.threads.length, 1);
+    assert.equal(archive.threads[0].threadKey, "benchmark_app/old-wt");
+    assert.equal(archive.threads[0].port, 3111);
+  });
+
+  it("退避先プロジェクトはデフォルトで折りたたみ", () => {
+    post(db, { project: "p", thread: "a", port: 3111 });
+    post(db, { project: "p", thread: "b", port: 3111 });
+    const archive = getBoard(db).find((p) => p.name === ARCHIVE_PROJECT_NAME);
+    assert.equal(archive.collapsed, true);
+  });
+
+  it("退避先で thread_key が衝突したら #id を付けて一意化する", () => {
+    // どちらも threadKey "main"、退避時に "p1/main" "p2/main" になるが、
+    // さらに同名が来たら #id で割れる
+    post(db, { project: "p1", thread: "main", port: 3111 });
+    post(db, { project: "p2", thread: "main", port: 3111 }); // p1/main を退避
+    post(db, { project: "p3", thread: "main", port: 3111 }); // p2/main を退避
+    // p1/main をもう一度作って同 port で押し出す (退避先で "p1/main" 既存と衝突)
+    post(db, { project: "p1", thread: "main", port: 3111 }); // 再作成
+    post(db, { project: "p4", thread: "main", port: 3111 }); // p1/main を再び退避 → #id
+
+    const archive = getBoard(db).find((p) => p.name === ARCHIVE_PROJECT_NAME);
+    const keys = archive.threads.map((t) => t.threadKey);
+    // すべて一意であること
+    assert.equal(new Set(keys).size, keys.length);
+    assert.ok(keys.some((k) => k.startsWith("p1/main#")));
+  });
+
+  it("port が無い Post は退避を起こさない", () => {
+    post(db, { project: "p1", thread: "t", port: null });
+    post(db, { project: "p2", thread: "t", port: null });
+    assert.equal(
+      getBoard(db).some((p) => p.name === ARCHIVE_PROJECT_NAME),
+      false,
+    );
+  });
+
+  it("同じカードの再 Post (同 project+thread) では自分を退避しない", () => {
+    post(db, { project: "p", thread: "t", port: 3111, current: "v1" });
+    post(db, { project: "p", thread: "t", port: 3111, current: "v2" });
+    assert.equal(
+      getBoard(db).some((p) => p.name === ARCHIVE_PROJECT_NAME),
+      false,
+    );
+    const t = getBoard(db).find((p) => p.name === "p").threads[0];
+    assert.equal(t.current, "v2");
   });
 
   it("reorder でプロジェクトの並びを更新する", () => {

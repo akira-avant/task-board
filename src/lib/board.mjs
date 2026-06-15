@@ -134,7 +134,89 @@ export function upsertThread(db, input) {
       `SELECT ${THREAD_COLUMNS} FROM threads WHERE project_id = ? AND thread_key = ?`,
     )
     .get(projectId, input.thread);
+
+  // dev server を畳んだ後に port が使い回されると、同じ port のカードが 2 枚
+  // 並んで「どっちが生きてるカードか」分からなくなる。いま Post したカードを
+  // 残し、同 port の古いカードは「削除済み」プロジェクトへ寄せる。
+  archiveStalePortCards(db, input.port, row.id);
+
   return toThread(row);
+}
+
+/** 古いカードを寄せる退避用プロジェクト名。 */
+export const ARCHIVE_PROJECT_NAME = "削除済み";
+
+/** 退避用プロジェクトを取得 (無ければ末尾に折りたたみ状態で作成)。 */
+function ensureArchiveProject(db) {
+  const existing = db
+    .prepare("SELECT id FROM projects WHERE name = ?")
+    .get(ARCHIVE_PROJECT_NAME);
+  if (existing) {
+    return existing.id;
+  }
+  const maxOrder = db
+    .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM projects")
+    .get();
+  const info = db
+    .prepare(
+      "INSERT INTO projects (name, sort_order, layout, collapsed) VALUES (?, ?, 'card', 1)",
+    )
+    .run(ARCHIVE_PROJECT_NAME, maxOrder.m + 1);
+  return Number(info.lastInsertRowid);
+}
+
+/**
+ * `port` と同じ port を持つ「別カード」を退避用プロジェクトへ移動する。
+ * `keepThreadId` (いま Post したカード) と、既に退避用にあるカードは対象外。
+ * 退避先で thread_key が衝突しないよう `元プロジェクト名/threadKey` に改名し、
+ * それでも衝突する場合は末尾に `#id` を付けて一意化する。
+ * @returns {number} 移動した件数
+ */
+export function archiveStalePortCards(db, port, keepThreadId) {
+  if (port == null) {
+    return 0;
+  }
+  const stale = db
+    .prepare(
+      `SELECT t.id, t.thread_key, p.name AS project_name
+       FROM threads t
+       JOIN projects p ON p.id = t.project_id
+       WHERE t.port = ? AND t.id != ? AND p.name != ?`,
+    )
+    .all(port, keepThreadId, ARCHIVE_PROJECT_NAME);
+  if (stale.length === 0) {
+    return 0;
+  }
+
+  const archiveId = ensureArchiveProject(db);
+  const maxOrder = db
+    .prepare(
+      "SELECT COALESCE(MAX(sort_order), -1) AS m FROM threads WHERE project_id = ?",
+    )
+    .get(archiveId);
+  let order = maxOrder.m + 1;
+
+  const keyTaken = db.prepare(
+    "SELECT 1 FROM threads WHERE project_id = ? AND thread_key = ?",
+  );
+  const move = db.prepare(
+    `UPDATE threads
+     SET project_id = ?, thread_key = ?, sort_order = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+  );
+
+  for (const t of stale) {
+    let key = `${t.project_name}/${t.thread_key}`;
+    if (keyTaken.get(archiveId, key)) {
+      key = `${key}#${t.id}`;
+    }
+    move.run(archiveId, key, order, t.id);
+    order += 1;
+  }
+
+  // 退避でカードが空になった元プロジェクトを掃除する。
+  pruneEmptyProjects(db);
+  return stale.length;
 }
 
 /** id 指定でスレッドの一部フィールドを更新 (done/starred トグル、編集)。 */
