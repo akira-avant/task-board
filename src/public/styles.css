@@ -570,6 +570,40 @@ button {
 .port-tag .sess {
   color: var(--ink-2);
 }
+/* ヘッダの What (current の先頭): ポートの右に出す主役ラベル。長い時は省略。 */
+.ac-what {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-hand);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* worktree 行: ヘッダから移動した branch / worktree 名。本文に小さく表示。 */
+.ac-wt {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 11px;
+}
+.ac-wt-k {
+  font-family: var(--font-hand);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+.ac-wt-v {
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ac-status {
   display: inline-flex;
   align-items: center;

@@ -77,6 +77,33 @@ function statusOf(t) {
   return STATUS_LABEL[t.status] ? t.status : "run";
 }
 
+// What = current の先頭 (最初の「：」or「:」より前)。current が更新されれば
+// 自動で追従する (task-board skill の「current 先頭 What 必須」規約と対応)。
+// 区切りが無ければ空 (ヘッダには What を出さずポートのみになる)。
+function whatOf(t) {
+  const c = (t.current || "").trim();
+  if (!c) return "";
+  const m = c.match(/^\s*(.{1,60}?)\s*[:：]/);
+  return m ? m[1].trim() : "";
+}
+
+// 表示順: card layout = ポート昇順 (null 末尾、同 port は最新優先) /
+// inline layout = 最新順 (updatedAt 降順)。DnD の sort_order より優先する。
+function sortThreads(threads, layout) {
+  const ts = [...threads];
+  if (layout === "inline") {
+    ts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  } else {
+    ts.sort((a, b) => {
+      const pa = a.port ?? Number.POSITIVE_INFINITY;
+      const pb = b.port ?? Number.POSITIVE_INFINITY;
+      if (pa !== pb) return pa - pb;
+      return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+    });
+  }
+  return ts;
+}
+
 /* ---- Agent card (cards layout) ---- */
 function kvValue(field, v) {
   const empty = v == null || v === "";
@@ -100,15 +127,24 @@ function agentCard(t) {
   const status = statusOf(t);
   const port = t.port ? `:${t.port}` : "—";
   const open = cardExpanded.has(t.id);
+  const what = whatOf(t);
+  const whatEl = what
+    ? `<span class="ac-what" title="${escapeHtml(what)}">${escapeHtml(what)}</span>`
+    : "";
+  const wt = t.threadKey
+    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span></div>`
+    : "";
   return `
     <div class="agent-card" data-tid="${t.id}">
       <div class="ac-top">
         <span class="ac-status ${status}" title="クリックで状態変更 (実行中→待機→完了)"><span class="d"></span>${STATUS_LABEL[status]}</span>
-        <span class="port-tag"><span class="port">${escapeHtml(port)}</span><span class="sess">${escapeHtml(t.threadKey)}</span></span>
+        <span class="port-tag"><span class="port">${escapeHtml(port)}</span></span>
+        ${whatEl}
         <span class="ac-time">${relativeTime(t.updatedAt)}</span>
         <button class="ac-del" type="button" aria-label="削除" data-del="${t.id}">${TRASH}</button>
       </div>
       <div class="ac-main">${kvValue("current", t.current)}</div>
+      ${wt}
       <button class="ac-more${open ? " open" : ""}" type="button" data-more="${t.id}"><span class="tw">${CHEV_RIGHT}</span>Next・Memo</button>
       ${open ? cardExtra(t) : ""}
     </div>`;
@@ -156,8 +192,9 @@ function doneItem(t) {
 }
 
 function taskListBody(project) {
-  const active = project.threads.filter((t) => !t.done);
-  const done = project.threads.filter((t) => t.done);
+  const ordered = sortThreads(project.threads, "inline");
+  const active = ordered.filter((t) => !t.done);
+  const done = ordered.filter((t) => t.done);
   const collapsed = doneCollapsed.has(project.id);
   let html = `<div class="task-list" data-pid="${project.id}">`;
   html += active.map(taskItem).join("");
@@ -178,7 +215,7 @@ function cardBody(project) {
   // 存在せず、カードをこのプロジェクトへ移動できなくなるため。
   const inner = empty
     ? '<div class="group-empty">セッションはありません</div>'
-    : project.threads.map(agentCard).join("");
+    : sortThreads(project.threads, "card").map(agentCard).join("");
   return `<div class="card-grid${empty ? " is-empty" : ""}" data-pid="${project.id}">${inner}</div>`;
 }
 
@@ -425,15 +462,15 @@ function openCardDialog(data = {}) {
   const layout = data.layout ?? "card";
   const radio = cardForm.querySelector(`input[name=layout][value="${layout}"]`);
   if (radio) radio.checked = true;
-  fProject.value = data.project ?? "";
+  fProject.value = data.project ?? "benchmark_app";
   fThread.value = "";
-  fPort.value = "";
+  fPort.value = data.port ?? 3111;
   fCurrent.value = "";
   fNext.value = "";
   fMemo.value = "";
   dialogOpen = true;
   cardDialog.showModal();
-  fProject.focus();
+  fThread.focus();
 }
 
 async function submitCard(e) {
