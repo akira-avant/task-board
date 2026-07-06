@@ -136,6 +136,23 @@ describe("messages", () => {
     assert.deepEqual(counts.get(sender.id), { unread: 0, total: 2 });
   });
 
+  it("getBoard に unreadCount / messageCount が載る", () => {
+    send(db);
+    send(db, { body: "second" });
+    const byName = Object.fromEntries(getBoard(db).map((p) => [p.name, p]));
+    const receiver = byName.p2.threads[0];
+    const sender = byName.p1.threads[0];
+    assert.equal(receiver.unreadCount, 2);
+    assert.equal(receiver.messageCount, 2);
+    assert.equal(sender.unreadCount, 0);
+    assert.equal(sender.messageCount, 2); // 送信分も会話として数える
+    // メッセージの無い新規カードは 0
+    card(db, "p3", "c");
+    const p3 = Object.fromEntries(getBoard(db).map((p) => [p.name, p])).p3;
+    assert.equal(p3.threads[0].unreadCount, 0);
+    assert.equal(p3.threads[0].messageCount, 0);
+  });
+
   it("カード削除で紐づくメッセージも消える (CASCADE)", () => {
     send(db);
     const to = resolveCard(db, "p2", "b");

@@ -1,3 +1,5 @@
+import { messageCounts } from "./messages.mjs";
+
 /**
  * @typedef {Object} Thread
  * @property {number} id
@@ -50,10 +52,15 @@ export function getBoard(db) {
     .prepare(`SELECT ${THREAD_COLUMNS} FROM threads ORDER BY sort_order, id`)
     .all();
 
+  const counts = messageCounts(db);
   const byProject = new Map();
   for (const row of threadRows) {
     const list = byProject.get(row.project_id) ?? [];
-    list.push(toThread(row));
+    const t = toThread(row);
+    const c = counts.get(t.id);
+    t.unreadCount = c?.unread ?? 0;
+    t.messageCount = c?.total ?? 0;
+    list.push(t);
     byProject.set(row.project_id, list);
   }
 
