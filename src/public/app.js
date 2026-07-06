@@ -30,6 +30,8 @@ const sortables = [];
 const doneCollapsed = new Set();
 const expandedRows = new Set();
 const cardExpanded = new Set();
+const msgExpanded = new Set();
+const msgCache = new Map(); // threadId -> Message[]
 
 function escapeHtml(s) {
   return String(s)
@@ -148,6 +150,26 @@ function cardExtra(t) {
   </div>`;
 }
 
+function messagePanel(t) {
+  const msgs = msgCache.get(t.id) ?? [];
+  if (msgs.length === 0) {
+    return '<div class="msg-panel"><div class="msg-empty">メッセージはありません</div></div>';
+  }
+  const items = msgs
+    .map((m) => {
+      const inbound = m.to.threadId === t.id;
+      const peer = inbound ? m.from : m.to;
+      const dir = inbound ? "←" : "→";
+      const unread = inbound && !m.readAt;
+      return `<div class="msg-item${unread ? " unread" : ""}">
+        <div class="msg-head"><span class="msg-dir">${dir}</span><span class="msg-peer">${escapeHtml(`${peer.project}/${peer.thread}`)}</span><span class="msg-time">${relativeTime(m.createdAt)}</span>${unread ? '<span class="msg-flag">未読</span>' : ""}</div>
+        <div class="msg-body">${richText(escapeHtml(m.body))}</div>
+      </div>`;
+    })
+    .join("");
+  return `<div class="msg-panel">${items}</div>`;
+}
+
 function agentCard(t) {
   const status = statusOf(t);
   const port = t.port ? `:${t.port}` : "—";
@@ -159,12 +181,17 @@ function agentCard(t) {
   const wt = t.threadKey
     ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span></div>`
     : "";
+  const msgOpen = msgExpanded.has(t.id);
+  const msgBadge = t.messageCount
+    ? `<button class="ac-msg${t.unreadCount ? " has-unread" : ""}${msgOpen ? " open" : ""}" type="button" title="メッセージ" aria-label="メッセージ" data-msg="${t.id}">✉${t.unreadCount ? ` ${t.unreadCount}` : ""}</button>`
+    : "";
   return `
     <div class="agent-card" data-tid="${t.id}">
       <div class="ac-top">
         <span class="ac-status ${status}" title="クリックで状態変更 (実行中→待機→完了)"><span class="d"></span>${STATUS_LABEL[status]}</span>
         <span class="port-tag"><span class="port">${escapeHtml(port)}</span></span>
         ${whatEl}
+        ${msgBadge}
         <span class="ac-time">${relativeTime(t.updatedAt)}</span>
         <button class="ac-del" type="button" aria-label="削除" data-del="${t.id}">${TRASH}</button>
       </div>
@@ -172,6 +199,7 @@ function agentCard(t) {
       ${wt}
       <button class="ac-more${open ? " open" : ""}" type="button" data-more="${t.id}"><span class="tw">${CHEV_RIGHT}</span>Next・Memo</button>
       ${open ? cardExtra(t) : ""}
+      ${msgOpen ? messagePanel(t) : ""}
     </div>`;
 }
 
@@ -384,7 +412,7 @@ function initSortables() {
         group: "threads",
         draggable: ".agent-card",
         handle: ".ac-top",
-        filter: ".ac-del, .ac-status, .inline-edit",
+        filter: ".ac-del, .ac-status, .ac-msg, .inline-edit",
         preventOnFilter: false,
       }),
     );
@@ -426,11 +454,34 @@ function updateLastUpdated() {
   stamp.textContent = `最終更新 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+async function fetchConversation(id) {
+  try {
+    const res = await fetch(`/api/threads/${id}/messages`, {
+      cache: "no-store",
+    });
+    if (res.ok) msgCache.set(id, (await res.json()).messages);
+  } catch {
+    // offline 中は既存キャッシュを表示し続ける
+  }
+}
+
+async function toggleMessages(id) {
+  if (msgExpanded.has(id)) {
+    msgExpanded.delete(id);
+  } else {
+    msgExpanded.add(id);
+    await fetchConversation(id);
+  }
+  render(board);
+}
+
 async function load() {
   const res = await fetch("/api/board", { cache: "no-store" });
   if (!res.ok) return;
   const data = await res.json();
   board = data.projects;
+  // 開いている会話ログは 5 秒自動更新に合わせて再取得する
+  await Promise.all([...msgExpanded].map(fetchConversation));
   render(board);
   updateLastUpdated();
 }
@@ -643,6 +694,11 @@ projectsEl.addEventListener("click", async (e) => {
       STATUS_ORDER.find((s) => statusBtn.classList.contains(s)) || "run";
     const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % 3];
     await patchThread(id, { status: next });
+    return;
+  }
+  const msgBtn = e.target.closest(".ac-msg");
+  if (msgBtn) {
+    await toggleMessages(Number(msgBtn.dataset.msg));
     return;
   }
   const more = e.target.closest(".ac-more");
