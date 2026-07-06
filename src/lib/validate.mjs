@@ -185,11 +185,14 @@ export function parsePostMessage(body) {
   }
   let replyTo = null;
   if (body.replyTo !== undefined && body.replyTo !== null) {
-    const n = Number(body.replyTo);
-    if (!Number.isInteger(n) || n <= 0) {
+    if (
+      typeof body.replyTo !== "number" ||
+      !Number.isInteger(body.replyTo) ||
+      body.replyTo <= 0
+    ) {
       return { error: "replyTo は正の整数" };
     }
-    replyTo = n;
+    replyTo = body.replyTo;
   }
   return { data: { ...fields, body: text, replyTo } };
 }

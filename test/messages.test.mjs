@@ -172,6 +172,9 @@ describe("validate messages", () => {
   it("replyTo は正の整数のみ / 省略時 null", () => {
     assert.ok(parsePostMessage({ ...base, body: "m", replyTo: 0 }).error);
     assert.ok(parsePostMessage({ ...base, body: "m", replyTo: "x" }).error);
+    assert.ok(parsePostMessage({ ...base, body: "m", replyTo: true }).error);
+    assert.ok(parsePostMessage({ ...base, body: "m", replyTo: "3" }).error);
+    assert.ok(parsePostMessage({ ...base, body: "m", replyTo: [3] }).error);
     assert.equal(
       parsePostMessage({ ...base, body: "m", replyTo: 3 }).data.replyTo,
       3,
