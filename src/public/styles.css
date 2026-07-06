@@ -1207,3 +1207,20 @@ textarea.inline-edit {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ---- card ID (メッセージ宛先) ---- */
+.ac-id {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: copy;
+}
+.ac-id:hover {
+  text-decoration: underline;
+}
+.ac-id.copied {
+  color: var(--ok);
+}

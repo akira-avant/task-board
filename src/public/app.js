@@ -170,7 +170,7 @@ function messagePanel(t) {
   return `<div class="msg-panel">${items}</div>`;
 }
 
-function agentCard(t) {
+function agentCard(t, projectName) {
   const status = statusOf(t);
   const port = t.port ? `:${t.port}` : "—";
   const open = cardExpanded.has(t.id);
@@ -178,8 +178,9 @@ function agentCard(t) {
   const whatEl = what
     ? `<span class="ac-what" title="${escapeHtml(what)}">${escapeHtml(what)}</span>`
     : "";
+  const addr = `${projectName}/${t.threadKey}`;
   const wt = t.threadKey
-    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span></div>`
+    ? `<div class="ac-wt"><span class="ac-wt-k">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button></div>`
     : "";
   const msgOpen = msgExpanded.has(t.id);
   const msgBadge = t.messageCount
@@ -271,7 +272,9 @@ function cardBody(project) {
   // 存在せず、カードをこのプロジェクトへ移動できなくなるため。
   const inner = empty
     ? '<div class="group-empty">セッションはありません</div>'
-    : sortThreads(project.threads, "card").map(agentCard).join("");
+    : sortThreads(project.threads, "card")
+        .map((t) => agentCard(t, project.name))
+        .join("");
   return `<div class="card-grid${empty ? " is-empty" : ""}" data-pid="${project.id}">${inner}</div>`;
 }
 
@@ -646,6 +649,17 @@ livePill.addEventListener("click", () => {
 });
 
 projectsEl.addEventListener("click", async (e) => {
+  const idCopy = e.target.closest(".ac-id");
+  if (idCopy) {
+    try {
+      await navigator.clipboard.writeText(idCopy.dataset.copy);
+      idCopy.classList.add("copied");
+      setTimeout(() => idCopy.classList.remove("copied"), 900);
+    } catch {
+      // clipboard 不可 (非セキュアコンテキスト等) は無視 — 表示自体が目的
+    }
+    return;
+  }
   const add = e.target.closest(".proj-add");
   if (add) {
     const proj = board.find((p) => p.name === add.dataset.pname);
