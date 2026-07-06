@@ -10,6 +10,7 @@ import {
   resolveCard,
   sendMessage,
 } from "../src/lib/messages.mjs";
+import { parsePostMessage, parseUpdateMessage } from "../src/lib/validate.mjs";
 
 function card(db, project, thread) {
   return upsertThread(db, {
@@ -141,5 +142,47 @@ describe("messages", () => {
     deleteThread(db, to.id);
     const from = resolveCard(db, "p1", "a");
     assert.equal(listConversation(db, from.id).length, 0);
+  });
+});
+
+describe("validate messages", () => {
+  const base = {
+    fromProject: "p",
+    fromThread: "t",
+    toProject: "q",
+    toThread: "u",
+  };
+
+  it("from/to/body 欠落・空白のみで error", () => {
+    assert.ok(parsePostMessage({}).error);
+    assert.ok(parsePostMessage("nope").error);
+    assert.ok(parsePostMessage({ ...base }).error); // body 無し
+    assert.ok(parsePostMessage({ ...base, body: "  " }).error);
+    assert.ok(
+      parsePostMessage({ ...base, fromProject: " ", body: "m" }).error,
+    );
+  });
+
+  it("trim して受理し、4000 文字丁度は通る / 超は error", () => {
+    const ok = parsePostMessage({ ...base, body: `  ${"x".repeat(4000)}  ` });
+    assert.equal(ok.data.body.length, 4000);
+    assert.ok(parsePostMessage({ ...base, body: "y".repeat(4001) }).error);
+  });
+
+  it("replyTo は正の整数のみ / 省略時 null", () => {
+    assert.ok(parsePostMessage({ ...base, body: "m", replyTo: 0 }).error);
+    assert.ok(parsePostMessage({ ...base, body: "m", replyTo: "x" }).error);
+    assert.equal(
+      parsePostMessage({ ...base, body: "m", replyTo: 3 }).data.replyTo,
+      3,
+    );
+    assert.equal(parsePostMessage({ ...base, body: "m" }).data.replyTo, null);
+  });
+
+  it("parseUpdateMessage は read:true のみ受け付ける", () => {
+    assert.ok(parseUpdateMessage({}).error);
+    assert.ok(parseUpdateMessage({ read: false }).error);
+    assert.ok(parseUpdateMessage(null).error);
+    assert.deepEqual(parseUpdateMessage({ read: true }).data, { read: true });
   });
 });

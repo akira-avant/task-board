@@ -161,3 +161,45 @@ export function parseReorder(body) {
   }
   return { data: { projects, threads } };
 }
+
+const MAX_MESSAGE_BODY = 4000;
+
+export function parsePostMessage(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { error: "body must be a JSON object" };
+  }
+  const fields = {};
+  for (const key of ["fromProject", "fromThread", "toProject", "toThread"]) {
+    const v = typeof body[key] === "string" ? body[key].trim() : "";
+    if (!v) {
+      return { error: `${key} は必須です` };
+    }
+    fields[key] = v;
+  }
+  const text = typeof body.body === "string" ? body.body.trim() : "";
+  if (!text) {
+    return { error: "body (本文) は必須です" };
+  }
+  if (text.length > MAX_MESSAGE_BODY) {
+    return { error: `body は ${MAX_MESSAGE_BODY} 文字以内` };
+  }
+  let replyTo = null;
+  if (body.replyTo !== undefined && body.replyTo !== null) {
+    const n = Number(body.replyTo);
+    if (!Number.isInteger(n) || n <= 0) {
+      return { error: "replyTo は正の整数" };
+    }
+    replyTo = n;
+  }
+  return { data: { ...fields, body: text, replyTo } };
+}
+
+export function parseUpdateMessage(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { error: "body must be a JSON object" };
+  }
+  if (body.read !== true) {
+    return { error: "read: true のみ受け付けます" };
+  }
+  return { data: { read: true } };
+}
