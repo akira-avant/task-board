@@ -1,0 +1,177 @@
+/**
+ * エージェント間メッセージング。
+ * 宛先/送信元はカード (threads 行)。(project, thread) 文字列から解決する。
+ * 存在しないカード宛はエラー — typo が dead letter として無音で溜まるのを防ぐ
+ * (post.mjs の「未知 project 作成禁止」ガードと同じ思想)。
+ *
+ * @typedef {Object} MessageParty
+ * @property {number} threadId
+ * @property {string} project
+ * @property {string} thread
+ *
+ * @typedef {Object} Message
+ * @property {number} id
+ * @property {string} body
+ * @property {number | null} replyToId
+ * @property {MessageParty} from
+ * @property {MessageParty} to
+ * @property {string | null} readAt
+ * @property {string} createdAt
+ */
+
+const MESSAGE_SELECT = `
+  SELECT m.id, m.body, m.reply_to_id, m.read_at, m.created_at,
+         m.from_thread_id, fp.name AS from_project, ft.thread_key AS from_thread,
+         m.to_thread_id,   tp.name AS to_project,   tt.thread_key AS to_thread
+  FROM messages m
+  JOIN threads ft ON ft.id = m.from_thread_id
+  JOIN projects fp ON fp.id = ft.project_id
+  JOIN threads tt ON tt.id = m.to_thread_id
+  JOIN projects tp ON tp.id = tt.project_id`;
+
+function toMessage(row) {
+  return {
+    id: row.id,
+    body: row.body,
+    replyToId: row.reply_to_id,
+    from: {
+      threadId: row.from_thread_id,
+      project: row.from_project,
+      thread: row.from_thread,
+    },
+    to: {
+      threadId: row.to_thread_id,
+      project: row.to_project,
+      thread: row.to_thread,
+    },
+    readAt: row.read_at,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * (project, thread) からカードを解決する。
+ * @returns {{id: number} | undefined}
+ */
+export function resolveCard(db, project, thread) {
+  return db
+    .prepare(
+      `SELECT t.id FROM threads t JOIN projects p ON p.id = t.project_id
+       WHERE p.name = ? AND t.thread_key = ?`,
+    )
+    .get(project, thread);
+}
+
+/**
+ * メッセージ送信。from/to は (project, thread) で指定。
+ * @returns {{message: Message} | {error: string, status: number}}
+ */
+export function sendMessage(db, input) {
+  const from = resolveCard(db, input.fromProject, input.fromThread);
+  if (!from) {
+    return {
+      error:
+        `送信元カード "${input.fromProject}/${input.fromThread}" がありません。` +
+        "先に進捗を post してください",
+      status: 404,
+    };
+  }
+  const to = resolveCard(db, input.toProject, input.toThread);
+  if (!to) {
+    return {
+      error: `宛先カード "${input.toProject}/${input.toThread}" がありません`,
+      status: 404,
+    };
+  }
+  if (from.id === to.id) {
+    return { error: "自分宛には送れません", status: 400 };
+  }
+  if (input.replyTo != null) {
+    const parent = db
+      .prepare("SELECT 1 FROM messages WHERE id = ?")
+      .get(input.replyTo);
+    if (!parent) {
+      return {
+        error: `replyTo メッセージ (id=${input.replyTo}) がありません`,
+        status: 400,
+      };
+    }
+  }
+  const info = db
+    .prepare(
+      `INSERT INTO messages (from_thread_id, to_thread_id, body, reply_to_id)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(from.id, to.id, input.body, input.replyTo ?? null);
+  const row = db
+    .prepare(`${MESSAGE_SELECT} WHERE m.id = ?`)
+    .get(Number(info.lastInsertRowid));
+  return { message: toMessage(row) };
+}
+
+/**
+ * 指定カード宛のメッセージ (unreadOnly で未読のみ)。古い順。
+ * @returns {Message[]}
+ */
+export function listInbox(db, threadId, { unreadOnly = false } = {}) {
+  const where = unreadOnly
+    ? "WHERE m.to_thread_id = ? AND m.read_at IS NULL"
+    : "WHERE m.to_thread_id = ?";
+  return db
+    .prepare(`${MESSAGE_SELECT} ${where} ORDER BY m.id`)
+    .all(threadId)
+    .map(toMessage);
+}
+
+/**
+ * カードの会話ログ全体 (送受信両方向・時系列)。
+ * @returns {Message[]}
+ */
+export function listConversation(db, threadId) {
+  return db
+    .prepare(
+      `${MESSAGE_SELECT} WHERE m.from_thread_id = ? OR m.to_thread_id = ? ORDER BY m.id`,
+    )
+    .all(threadId, threadId)
+    .map(toMessage);
+}
+
+/**
+ * 既読化 (冪等 — 既読済みでも read_at は最初の値を保持)。
+ * @returns {boolean} メッセージが存在したか
+ */
+export function markMessageRead(db, id) {
+  const info = db
+    .prepare(
+      "UPDATE messages SET read_at = COALESCE(read_at, datetime('now')) WHERE id = ?",
+    )
+    .run(id);
+  return info.changes > 0;
+}
+
+/**
+ * 各カードのメッセージ集計 (getBoard のバッジ用)。
+ * unread = 自分宛の未読数、total = 送受信合わせた会話の総数。
+ * @returns {Map<number, {unread: number, total: number}>}
+ */
+export function messageCounts(db) {
+  const map = new Map();
+  const bump = (tid, unread) => {
+    const c = map.get(tid) ?? { unread: 0, total: 0 };
+    c.total += 1;
+    c.unread += unread;
+    map.set(tid, c);
+  };
+  const rows = db
+    .prepare(
+      `SELECT from_thread_id AS f, to_thread_id AS t,
+              (read_at IS NULL) AS u
+       FROM messages`,
+    )
+    .all();
+  for (const r of rows) {
+    bump(r.t, r.u ? 1 : 0);
+    bump(r.f, 0);
+  }
+  return map;
+}

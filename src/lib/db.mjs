@@ -46,6 +46,19 @@ export function initSchema(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      to_thread_id   INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      body           TEXT NOT NULL,
+      reply_to_id    INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+      read_at        TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_to   ON messages(to_thread_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_thread_id);
   `);
 
   // 既存 DB 向けマイグレーション (新規 DB では CREATE 時点で存在)
