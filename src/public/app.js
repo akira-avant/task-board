@@ -180,7 +180,8 @@ function agentCard(t, projectName) {
     : "";
   const addr = `${projectName}/${t.threadKey}`;
   const wt = t.threadKey
-    ? `<div class="ac-wt"><span class="ac-wt-k">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button></div>`
+    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span></div>
+      <div class="ac-wt"><span class="ac-wt-k">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button></div>`
     : "";
   const msgOpen = msgExpanded.has(t.id);
   const msgBadge = t.messageCount
