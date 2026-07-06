@@ -14,8 +14,17 @@ import {
 } from "./src/lib/board.mjs";
 import { getDb } from "./src/lib/db.mjs";
 import {
+  listConversation,
+  listInbox,
+  markMessageRead,
+  resolveCard,
+  sendMessage,
+} from "./src/lib/messages.mjs";
+import {
+  parsePostMessage,
   parsePostThread,
   parseReorder,
+  parseUpdateMessage,
   parseUpdateProject,
   parseUpdateThread,
 } from "./src/lib/validate.mjs";
@@ -92,7 +101,8 @@ function serveStatic(res, pathname) {
   });
 }
 
-async function handleApi(req, res, pathname) {
+async function handleApi(req, res, url) {
+  const pathname = url.pathname;
   const db = getDb();
 
   if (req.method === "GET" && pathname === "/api/board") {
@@ -131,6 +141,79 @@ async function handleApi(req, res, pathname) {
       return;
     }
     reorder(db, parsed.data);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/messages") {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: "invalid JSON" });
+      return;
+    }
+    const parsed = parsePostMessage(body);
+    if (parsed.error) {
+      sendJson(res, 400, { error: parsed.error });
+      return;
+    }
+    const result = sendMessage(db, parsed.data);
+    if (result.error) {
+      sendJson(res, result.status, { error: result.error });
+      return;
+    }
+    sendJson(res, 200, { message: result.message });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/messages") {
+    const project = (url.searchParams.get("project") ?? "").trim();
+    const thread = (url.searchParams.get("thread") ?? "").trim();
+    if (!project || !thread) {
+      sendJson(res, 400, { error: "project / thread クエリは必須です" });
+      return;
+    }
+    const cardRow = resolveCard(db, project, thread);
+    if (!cardRow) {
+      sendJson(res, 404, { error: `カード "${project}/${thread}" がありません` });
+      return;
+    }
+    const unreadOnly = url.searchParams.get("unread") === "1";
+    sendJson(res, 200, { messages: listInbox(db, cardRow.id, { unreadOnly }) });
+    return;
+  }
+
+  const threadMessagesMatch = pathname.match(/^\/api\/threads\/(\d+)\/messages$/);
+  if (req.method === "GET" && threadMessagesMatch) {
+    const id = Number(threadMessagesMatch[1]);
+    const exists = db.prepare("SELECT 1 FROM threads WHERE id = ?").get(id);
+    if (!exists) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    sendJson(res, 200, { messages: listConversation(db, id) });
+    return;
+  }
+
+  const messageMatch = pathname.match(/^\/api\/messages\/(\d+)$/);
+  if (req.method === "PATCH" && messageMatch) {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: "invalid JSON" });
+      return;
+    }
+    const parsed = parseUpdateMessage(body);
+    if (parsed.error) {
+      sendJson(res, 400, { error: parsed.error });
+      return;
+    }
+    if (!markMessageRead(db, Number(messageMatch[1]))) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -211,7 +294,7 @@ const server = createServer((req, res) => {
   const pathname = url.pathname;
 
   if (pathname.startsWith("/api/")) {
-    handleApi(req, res, pathname).catch((err) => {
+    handleApi(req, res, url).catch((err) => {
       console.error("[api error]", err);
       sendJson(res, 500, { error: "internal error" });
     });

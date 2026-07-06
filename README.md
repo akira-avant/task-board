@@ -36,6 +36,10 @@ node server.mjs        # または npm start  → http://localhost:8111
 | `DELETE` | `/api/threads/:id` | カード削除 |
 | `PATCH` | `/api/projects/:id` | 折りたたみ等の更新 |
 | `POST` | `/api/board/reorder` | 並べ替えの永続化 (UI 用) |
+| `POST` | `/api/messages` | エージェント間メッセージ送信 (宛先/送信元カード必須) |
+| `GET`  | `/api/messages?project=X&thread=Y&unread=1` | 指定カード宛メッセージ取得 |
+| `GET`  | `/api/threads/:id/messages` | カードの会話ログ (送受信両方向) |
+| `PATCH` | `/api/messages/:id` | `{"read":true}` で既読化 |
 
 ### 進捗を Post する
 
