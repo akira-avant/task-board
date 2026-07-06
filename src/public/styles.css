@@ -1209,6 +1209,9 @@ textarea.inline-edit {
 }
 
 /* ---- card ID (メッセージ宛先) ---- */
+.ac-wt-k2 {
+  margin-left: 8px;
+}
 .ac-id {
   background: transparent;
   border: 0;
