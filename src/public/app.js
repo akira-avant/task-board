@@ -39,6 +39,28 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+// escapeHtml 済みのテキストに、許可した装飾パターンだけ HTML を復元する。
+// 入力は必ず escape 済みなので、ここで差し込む固定タグ以外に生 HTML は混ざらない
+// (= XSS 安全)。改行・インデントは CSS の white-space: pre-wrap が描画する。
+//   **太字**         → <strong>
+//   行頭マーカー     → 薄色 span (└ ├ → ▸ ▹ ✓ • ▪ ◦ ‣ …で構造を視覚化)
+// 絵文字は Unicode なのでそのまま色付きで表示される。
+function richText(escaped) {
+  return String(escaped)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^([ \t　]*)([└├│→▸▹✓•▪◦‣])/gm, '$1<span class="mk">$2</span>');
+}
+
+// richText で <strong> 化すると textContent から `**` が消えるため、インライン編集が
+// 元ソースを失う。装飾フィールドは生テキストを data-raw に退避し、編集時はそこから復元する。
+function unescapeHtml(s) {
+  return String(s)
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
+}
+
 function relativeTime(sqliteUtc) {
   const then = new Date(`${sqliteUtc.replace(" ", "T")}Z`).getTime();
   if (Number.isNaN(then)) return "";
@@ -81,7 +103,8 @@ function statusOf(t) {
 // 自動で追従する (task-board skill の「current 先頭 What 必須」規約と対応)。
 // 区切りが無ければ空 (ヘッダには What を出さずポートのみになる)。
 function whatOf(t) {
-  const c = (t.current || "").trim();
+  // 装飾記法 (**太字**) はヘッダでは素のテキストにする。絵文字は残す。
+  const c = (t.current || "").replace(/\*\*/g, "").trim();
   if (!c) return "";
   const m = c.match(/^\s*(.{1,60}?)\s*[:：]/);
   return m ? m[1].trim() : "";
@@ -108,14 +131,16 @@ function sortThreads(threads, layout) {
 function kvValue(field, v) {
   const empty = v == null || v === "";
   const cls = `v editable${field === "current" ? " cur" : ""}${empty ? " empty" : ""}`;
-  const inner = empty ? "—" : escapeHtml(v);
-  return `<span class="${cls}" data-tid-field="${field}">${inner}</span>`;
+  const esc = empty ? "" : escapeHtml(v);
+  const inner = empty ? "—" : richText(esc);
+  return `<span class="${cls}" data-tid-field="${field}" data-raw="${esc}">${inner}</span>`;
 }
 
 function cardExtra(t) {
   const row = (field, label, v) => {
     const empty = v == null || v === "";
-    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="multi">${empty ? "—" : escapeHtml(String(v))}</span>`;
+    const esc = empty ? "" : escapeHtml(String(v));
+    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="multi" data-raw="${esc}">${empty ? "—" : richText(esc)}</span>`;
   };
   return `<div class="ac-extra">
     ${row("next", "Next", t.next)}
@@ -154,7 +179,9 @@ function agentCard(t) {
 function taskDetail(t) {
   const row = (field, label, v, edit) => {
     const empty = v == null || v === "";
-    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="${edit}">${empty ? "—" : escapeHtml(String(v))}</span>`;
+    const esc = empty ? "" : escapeHtml(String(v));
+    const shown = edit === "line" ? esc : richText(esc);
+    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="${edit}" data-raw="${esc}">${empty ? "—" : shown}</span>`;
   };
   return `<div class="task-detail" data-tid="${t.id}">
     ${row("next", "Next", t.next, "multi")}
@@ -165,16 +192,17 @@ function taskDetail(t) {
 
 function taskItem(t) {
   const title = t.current && t.current.trim() ? t.current : t.threadKey;
+  const titleEsc = escapeHtml(title);
   const subs = [];
   if (t.port) subs.push(`<span class="mono">:${t.port}</span>`);
-  if (t.next) subs.push(`→ ${escapeHtml(t.next)}`);
+  if (t.next) subs.push(`→ ${richText(escapeHtml(t.next))}`);
   const sub = subs.length ? `<div class="task-sub">${subs.join(" ")}</div>` : "";
   const expanded = expandedRows.has(t.id);
   return `
     <div class="task-item" data-tid="${t.id}">
       <button class="task-check" type="button" aria-label="完了にする" data-check="${t.id}"><span class="ck"></span></button>
       <div class="task-body">
-        <div class="task-title editable" data-tid-field="current" data-edit="line">${escapeHtml(title)}</div>
+        <div class="task-title editable" data-tid-field="current" data-edit="line" data-raw="${titleEsc}">${richText(titleEsc)}</div>
         ${sub}
       </div>
       <span class="task-expand${expanded ? " open" : ""}" aria-hidden="true">${CHEV_RIGHT}</span>
@@ -415,7 +443,13 @@ function startInlineEdit(el) {
   const field = el.dataset.tidField;
   if (!id || !field) return;
   const multiline = el.dataset.edit !== "line";
-  const value = el.classList.contains("empty") ? "" : el.textContent.trim();
+  // 表示は richText で装飾されるため textContent では `**`/マーカーが失われる。
+  // 装飾フィールドは data-raw に退避した生ソースを編集対象にする。
+  const value = el.classList.contains("empty")
+    ? ""
+    : el.dataset.raw != null
+      ? unescapeHtml(el.dataset.raw)
+      : el.textContent.trim();
   const editor = document.createElement(multiline ? "textarea" : "input");
   editor.className = "inline-edit";
   editor.value = value;

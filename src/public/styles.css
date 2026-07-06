@@ -674,6 +674,18 @@ button {
   color: var(--ink-5);
   font-weight: 400;
 }
+/* richText 装飾: **太字** と行頭の構造マーカー (薄色)。
+   current / next / memo・インライン title で共通。 */
+.v strong,
+.task-title strong,
+.task-sub strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.mk {
+  color: var(--info);
+  font-weight: 600;
+}
 .ac-more {
   display: inline-flex;
   align-items: center;
