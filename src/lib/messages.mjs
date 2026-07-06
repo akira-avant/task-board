@@ -138,6 +138,8 @@ export function listConversation(db, threadId) {
 
 /**
  * 既読化 (冪等 — 既読済みでも read_at は最初の値を保持)。
+ * SQLite の changes() は COALESCE が no-op でも WHERE 一致行を数えるため、
+ * 既読済みへの再実行でも「存在した」= true が返る (存在チェックを兼ねる)。
  * @returns {boolean} メッセージが存在したか
  */
 export function markMessageRead(db, id) {
