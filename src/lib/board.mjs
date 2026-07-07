@@ -9,6 +9,7 @@ import { messageCounts } from "./messages.mjs";
  * @property {string | null} current
  * @property {string | null} next
  * @property {string | null} memo
+ * @property {string | null} sessionId
  * @property {number} sortOrder
  * @property {string} updatedAt
  *
@@ -32,13 +33,14 @@ function toThread(row) {
     done: row.done === 1,
     starred: row.starred === 1,
     status: row.status ?? "run",
+    sessionId: row.session_id ?? null,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
   };
 }
 
 const THREAD_COLUMNS =
-  "id, project_id, thread_key, port, current, next, memo, done, starred, status, sort_order, updated_at";
+  "id, project_id, thread_key, port, current, next, memo, done, starred, status, session_id, sort_order, updated_at";
 
 /** @returns {Project[]} */
 export function getBoard(db) {
@@ -114,7 +116,8 @@ export function upsertThread(db, input) {
     db.prepare(
       `UPDATE threads
        SET port = ?, current = ?, next = ?, memo = ?,
-           status = COALESCE(?, status), updated_at = datetime('now')
+           status = COALESCE(?, status),
+           session_id = COALESCE(?, session_id), updated_at = datetime('now')
        WHERE id = ?`,
     ).run(
       input.port,
@@ -122,6 +125,7 @@ export function upsertThread(db, input) {
       input.next,
       input.memo,
       input.status ?? null,
+      input.sessionId ?? null,
       existing.id,
     );
   } else {
@@ -132,8 +136,8 @@ export function upsertThread(db, input) {
       .get(projectId);
     db.prepare(
       `INSERT INTO threads
-         (project_id, thread_key, port, current, next, memo, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (project_id, thread_key, port, current, next, memo, status, session_id, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       projectId,
       input.thread,
@@ -142,6 +146,7 @@ export function upsertThread(db, input) {
       input.next,
       input.memo,
       input.status ?? "run",
+      input.sessionId ?? null,
       maxOrder.m + 1,
     );
   }

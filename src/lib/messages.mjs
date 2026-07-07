@@ -62,6 +62,40 @@ export function resolveCard(db, project, thread) {
     .get(project, thread);
 }
 
+/** LIKE のワイルドカード (% _ \) をエスケープする。 */
+function escapeLike(s) {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * セッションID (claude session UUID) からカードを解決する (宛先の別名)。
+ * 完全一致を優先し、無ければ先頭一致 (prefix、例 "4f5c0f71")。
+ * 複数ヒット時は最新更新カード (updated_at DESC, id DESC)。
+ * @returns {{id: number} | undefined}
+ */
+export function resolveCardBySession(db, sessionId) {
+  if (!sessionId) {
+    return undefined;
+  }
+  const exact = db
+    .prepare(
+      `SELECT id FROM threads
+       WHERE session_id = ?
+       ORDER BY updated_at DESC, id DESC LIMIT 1`,
+    )
+    .get(sessionId);
+  if (exact) {
+    return exact;
+  }
+  return db
+    .prepare(
+      `SELECT id FROM threads
+       WHERE session_id LIKE ? ESCAPE '\\'
+       ORDER BY updated_at DESC, id DESC LIMIT 1`,
+    )
+    .get(`${escapeLike(sessionId)}%`);
+}
+
 /**
  * メッセージ送信。from/to は (project, thread) で指定。
  * @returns {{message: Message} | {error: string, status: number}}
@@ -76,12 +110,23 @@ export function sendMessage(db, input) {
       status: 404,
     };
   }
-  const to = resolveCard(db, input.toProject, input.toThread);
-  if (!to) {
-    return {
-      error: `宛先カード "${input.toProject}/${input.toThread}" がありません`,
-      status: 404,
-    };
+  let to;
+  if (input.toSessionId) {
+    to = resolveCardBySession(db, input.toSessionId);
+    if (!to) {
+      return {
+        error: `宛先セッション "${input.toSessionId}" のカードがありません`,
+        status: 404,
+      };
+    }
+  } else {
+    to = resolveCard(db, input.toProject, input.toThread);
+    if (!to) {
+      return {
+        error: `宛先カード "${input.toProject}/${input.toThread}" がありません`,
+        status: 404,
+      };
+    }
   }
   if (from.id === to.id) {
     return { error: "自分宛には送れません", status: 400 };

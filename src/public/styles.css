@@ -1212,7 +1212,8 @@ textarea.inline-edit {
 .ac-wt-k2 {
   margin-left: 8px;
 }
-.ac-id {
+.ac-id,
+.ac-resume {
   background: transparent;
   border: 0;
   padding: 0;
@@ -1221,9 +1222,15 @@ textarea.inline-edit {
   text-align: left;
   cursor: copy;
 }
-.ac-id:hover {
+.ac-resume {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+.ac-id:hover,
+.ac-resume:hover {
   text-decoration: underline;
 }
-.ac-id.copied {
+.ac-id.copied,
+.ac-resume.copied {
   color: var(--ok);
 }

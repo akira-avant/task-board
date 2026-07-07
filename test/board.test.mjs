@@ -238,3 +238,33 @@ describe("validate", () => {
     assert.equal(r.data.thread, "t");
   });
 });
+
+describe("session id (再開用)", () => {
+  let db;
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  const SID = "4f5c0f71-a025-4712-8859-56cf025f9841";
+
+  it("Post 時に sessionId を保存し getBoard が返す", () => {
+    post(db, { project: "p", thread: "t", sessionId: SID });
+    assert.equal(getBoard(db)[0].threads[0].sessionId, SID);
+  });
+
+  it("sessionId 省略の再 Post で既存値は維持される (COALESCE)", () => {
+    post(db, { project: "p", thread: "t", sessionId: SID });
+    post(db, { project: "p", thread: "t", current: "更新" });
+    assert.equal(getBoard(db)[0].threads[0].sessionId, SID);
+  });
+
+  it("sessionId 明示の再 Post で更新される", () => {
+    post(db, { project: "p", thread: "t", sessionId: "old" });
+    post(db, { project: "p", thread: "t", sessionId: "new" });
+    assert.equal(getBoard(db)[0].threads[0].sessionId, "new");
+  });
+
+  it("sessionId 無しは null (後方互換)", () => {
+    assert.equal(post(db, { project: "p", thread: "t" }).sessionId, null);
+  });
+});

@@ -20,6 +20,7 @@
 | `current` | — | string | 今やっていること。 |
 | `next`    | — | string | 次にやること。 |
 | `memo`    | — | string | 補足 (PR 番号・ブロッカー等)。 |
+| `sessionId` | — | string | このカードの作業をしている Claude セッションの ID (`CLAUDE_CODE_SESSION_ID`)。ボードの「⟳再開」で `claude -r <id>` をコピーでき、`/api/messages` の宛先別名 `toSessionId` にもなる。省略時は既存値を維持 (COALESCE)。 |
 
 **upsert される**: 同じ `(project, thread)` に再 Post すると**上書き更新**。`project` は無ければ自動作成。
 だから「節目ごとに最新状態を上書き投稿」で OK。履歴は残らない (最新のみ)。

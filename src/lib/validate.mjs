@@ -54,6 +54,7 @@ export function parsePostThread(body) {
       current: trimOrNull(body.current),
       next: trimOrNull(body.next),
       memo: trimOrNull(body.memo),
+      sessionId: trimOrNull(body.sessionId),
       layout,
       status,
     },
@@ -169,12 +170,26 @@ export function parsePostMessage(body) {
     return { error: "body must be a JSON object" };
   }
   const fields = {};
-  for (const key of ["fromProject", "fromThread", "toProject", "toThread"]) {
+  for (const key of ["fromProject", "fromThread"]) {
     const v = typeof body[key] === "string" ? body[key].trim() : "";
     if (!v) {
       return { error: `${key} は必須です` };
     }
     fields[key] = v;
+  }
+  // 宛先は (toProject + toThread) か、その別名 toSessionId のいずれか。
+  const toSessionId = trimOrNull(body.toSessionId);
+  const toProject =
+    typeof body.toProject === "string" ? body.toProject.trim() : "";
+  const toThread =
+    typeof body.toThread === "string" ? body.toThread.trim() : "";
+  if (toSessionId) {
+    fields.toSessionId = toSessionId;
+  } else if (toProject && toThread) {
+    fields.toProject = toProject;
+    fields.toThread = toThread;
+  } else {
+    return { error: "宛先は toProject+toThread か toSessionId が必要です" };
   }
   const text = typeof body.body === "string" ? body.body.trim() : "";
   if (!text) {

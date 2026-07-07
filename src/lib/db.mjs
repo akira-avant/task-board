@@ -39,6 +39,7 @@ export function initSchema(db) {
       done        INTEGER NOT NULL DEFAULT 0,
       starred     INTEGER NOT NULL DEFAULT 0,
       status      TEXT NOT NULL DEFAULT 'run',
+      session_id  TEXT,
       sort_order  INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -66,6 +67,7 @@ export function initSchema(db) {
   ensureColumn(db, "threads", "done", "done INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "threads", "starred", "starred INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "threads", "status", "status TEXT NOT NULL DEFAULT 'run'");
+  ensureColumn(db, "threads", "session_id", "session_id TEXT");
 }
 
 /** @returns {DatabaseSync} */

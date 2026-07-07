@@ -179,8 +179,11 @@ function agentCard(t, projectName) {
     ? `<span class="ac-what" title="${escapeHtml(what)}">${escapeHtml(what)}</span>`
     : "";
   const addr = `${projectName}/${t.threadKey}`;
+  const resume = t.sessionId
+    ? `<span class="ac-wt-k ac-wt-k2">再開</span><button class="ac-wt-v ac-resume" type="button" title="クリックで再開コマンド (claude -r ${escapeHtml(t.sessionId)}) をコピー" data-copy="claude -r ${escapeHtml(t.sessionId)}">⟳再開</button>`
+    : "";
   const wt = t.threadKey
-    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button></div>`
+    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button>${resume}</div>`
     : "";
   const msgOpen = msgExpanded.has(t.id);
   const msgBadge = t.messageCount
@@ -649,12 +652,13 @@ livePill.addEventListener("click", () => {
 });
 
 projectsEl.addEventListener("click", async (e) => {
-  const idCopy = e.target.closest(".ac-id");
-  if (idCopy) {
+  // data-copy を持つボタン (宛先 ID / 再開コマンド) は共通でクリップボードへ。
+  const copyEl = e.target.closest("[data-copy]");
+  if (copyEl) {
     try {
-      await navigator.clipboard.writeText(idCopy.dataset.copy);
-      idCopy.classList.add("copied");
-      setTimeout(() => idCopy.classList.remove("copied"), 900);
+      await navigator.clipboard.writeText(copyEl.dataset.copy);
+      copyEl.classList.add("copied");
+      setTimeout(() => copyEl.classList.remove("copied"), 900);
     } catch {
       // clipboard 不可 (非セキュアコンテキスト等) は無視 — 表示自体が目的
     }

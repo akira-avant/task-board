@@ -8,6 +8,7 @@ import {
   markMessageRead,
   messageCounts,
   resolveCard,
+  resolveCardBySession,
   sendMessage,
 } from "../src/lib/messages.mjs";
 import { parsePostMessage, parseUpdateMessage } from "../src/lib/validate.mjs";
@@ -20,6 +21,18 @@ function card(db, project, thread) {
     current: null,
     next: null,
     memo: null,
+  });
+}
+
+function sidCard(db, project, thread, sessionId) {
+  return upsertThread(db, {
+    project,
+    thread,
+    port: null,
+    current: null,
+    next: null,
+    memo: null,
+    sessionId,
   });
 }
 
@@ -204,5 +217,77 @@ describe("validate messages", () => {
     assert.ok(parseUpdateMessage({ read: false }).error);
     assert.ok(parseUpdateMessage(null).error);
     assert.deepEqual(parseUpdateMessage({ read: true }).data, { read: true });
+  });
+
+  it("toSessionId 宛先を受理する (toProject/toThread 無しでも可)", () => {
+    const r = parsePostMessage({
+      fromProject: "p",
+      fromThread: "t",
+      toSessionId: "4f5c0f71",
+      body: "m",
+    });
+    assert.ok(r.data, r.error);
+    assert.equal(r.data.toSessionId, "4f5c0f71");
+  });
+
+  it("宛先 (toProject/toThread も toSessionId も) 全く無いと error", () => {
+    assert.ok(
+      parsePostMessage({ fromProject: "p", fromThread: "t", body: "m" }).error,
+    );
+  });
+});
+
+describe("session id 宛先 (alias)", () => {
+  let db;
+  beforeEach(() => {
+    db = createInMemoryDb();
+    card(db, "p1", "a"); // 送信元 (session なし)
+  });
+
+  const SID = "4f5c0f71-a025-4712-8859-56cf025f9841";
+
+  it("resolveCardBySession: full 一致で解決", () => {
+    const t = sidCard(db, "p2", "b", SID);
+    assert.equal(resolveCardBySession(db, SID).id, t.id);
+  });
+
+  it("resolveCardBySession: prefix (先頭一致) で解決", () => {
+    const t = sidCard(db, "p2", "b", SID);
+    assert.equal(resolveCardBySession(db, "4f5c0f71").id, t.id);
+  });
+
+  it("resolveCardBySession: 複数ヒットは最新更新カード", () => {
+    sidCard(db, "p2", "b", "abcd0000-old");
+    const later = sidCard(db, "p3", "c", "abcd9999-new");
+    assert.equal(resolveCardBySession(db, "abcd").id, later.id);
+  });
+
+  it("resolveCardBySession: 0 件は undefined", () => {
+    assert.equal(resolveCardBySession(db, "nomatch"), undefined);
+  });
+
+  it("sendMessage を toSessionId で送れる", () => {
+    sidCard(db, "p2", "b", "sess-xyz");
+    const r = sendMessage(db, {
+      fromProject: "p1",
+      fromThread: "a",
+      toSessionId: "sess-xyz",
+      body: "hi",
+      replyTo: null,
+    });
+    assert.ok(r.message, r.error);
+    assert.equal(r.message.to.project, "p2");
+    assert.equal(r.message.to.thread, "b");
+  });
+
+  it("存在しない toSessionId は 404 error", () => {
+    const r = sendMessage(db, {
+      fromProject: "p1",
+      fromThread: "a",
+      toSessionId: "ghost",
+      body: "hi",
+      replyTo: null,
+    });
+    assert.equal(r.status, 404);
   });
 });
