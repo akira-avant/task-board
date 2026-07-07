@@ -180,10 +180,14 @@ function agentCard(t, projectName) {
     : "";
   const addr = `${projectName}/${t.threadKey}`;
   const resume = t.sessionId
-    ? `<span class="ac-wt-k ac-wt-k2">再開</span><button class="ac-wt-v ac-resume" type="button" title="クリックで再開コマンド (claude -r ${escapeHtml(t.sessionId)}) をコピー" data-copy="claude -r ${escapeHtml(t.sessionId)}">⟳再開</button>`
+    ? `<button class="ac-wt-v ac-resume ac-wt-k2" type="button" title="クリックで再開コマンド (claude -r ${escapeHtml(t.sessionId)}) をコピー" data-copy="claude -r ${escapeHtml(t.sessionId)}">⟳再開</button>`
     : "";
-  const wt = t.threadKey
-    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v">${escapeHtml(t.threadKey)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="クリックで宛先 ID をコピー (エージェント間メッセージ用)" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button>${resume}</div>`
+  // "worktree" 行の値は実フォルダ名 (t.worktree)。未登録の古いカードや本体リポジトリの
+  // カードは threadKey (branch / "main") にフォールバック。長い時は省略されるので、
+  // ホバーで全体が読めるよう title 属性に生の値を入れる。
+  const wtName = t.worktree ?? t.threadKey;
+  const wt = wtName
+    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v" title="${escapeHtml(wtName)}">${escapeHtml(wtName)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="${escapeHtml(addr)}（クリックで宛先 ID をコピー）" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button>${resume}</div>`
     : "";
   const msgOpen = msgExpanded.has(t.id);
   const msgBadge = t.messageCount

@@ -55,6 +55,7 @@ export function parsePostThread(body) {
       next: trimOrNull(body.next),
       memo: trimOrNull(body.memo),
       sessionId: trimOrNull(body.sessionId),
+      worktree: trimOrNull(body.worktree),
       layout,
       status,
     },

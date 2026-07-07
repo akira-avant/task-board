@@ -268,3 +268,38 @@ describe("session id (再開用)", () => {
     assert.equal(post(db, { project: "p", thread: "t" }).sessionId, null);
   });
 });
+
+describe("worktree (フォルダ名表示)", () => {
+  let db;
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  it("Post 時に worktree (フォルダ名) を保存し getBoard が返す", () => {
+    // thread=branch 名、worktree=実フォルダ名 (別物)
+    post(db, {
+      project: "benchmark_app",
+      thread: "fix/vercel-node-engines",
+      worktree: "ui-test",
+    });
+    const t = getBoard(db)[0].threads[0];
+    assert.equal(t.threadKey, "fix/vercel-node-engines");
+    assert.equal(t.worktree, "ui-test");
+  });
+
+  it("worktree 省略の再 Post で既存値は維持される (COALESCE)", () => {
+    post(db, { project: "p", thread: "t", worktree: "ui-test" });
+    post(db, { project: "p", thread: "t", current: "更新" });
+    assert.equal(getBoard(db)[0].threads[0].worktree, "ui-test");
+  });
+
+  it("worktree 明示の再 Post で更新される", () => {
+    post(db, { project: "p", thread: "t", worktree: "old-dir" });
+    post(db, { project: "p", thread: "t", worktree: "new-dir" });
+    assert.equal(getBoard(db)[0].threads[0].worktree, "new-dir");
+  });
+
+  it("worktree 無しは null (本体リポジトリ / 後方互換)", () => {
+    assert.equal(post(db, { project: "p", thread: "t" }).worktree, null);
+  });
+});

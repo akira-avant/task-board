@@ -10,6 +10,7 @@ import { messageCounts } from "./messages.mjs";
  * @property {string | null} next
  * @property {string | null} memo
  * @property {string | null} sessionId
+ * @property {string | null} worktree
  * @property {number} sortOrder
  * @property {string} updatedAt
  *
@@ -34,13 +35,14 @@ function toThread(row) {
     starred: row.starred === 1,
     status: row.status ?? "run",
     sessionId: row.session_id ?? null,
+    worktree: row.worktree ?? null,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
   };
 }
 
 const THREAD_COLUMNS =
-  "id, project_id, thread_key, port, current, next, memo, done, starred, status, session_id, sort_order, updated_at";
+  "id, project_id, thread_key, port, current, next, memo, done, starred, status, session_id, worktree, sort_order, updated_at";
 
 /** @returns {Project[]} */
 export function getBoard(db) {
@@ -117,7 +119,8 @@ export function upsertThread(db, input) {
       `UPDATE threads
        SET port = ?, current = ?, next = ?, memo = ?,
            status = COALESCE(?, status),
-           session_id = COALESCE(?, session_id), updated_at = datetime('now')
+           session_id = COALESCE(?, session_id),
+           worktree = COALESCE(?, worktree), updated_at = datetime('now')
        WHERE id = ?`,
     ).run(
       input.port,
@@ -126,6 +129,7 @@ export function upsertThread(db, input) {
       input.memo,
       input.status ?? null,
       input.sessionId ?? null,
+      input.worktree ?? null,
       existing.id,
     );
   } else {
@@ -136,8 +140,8 @@ export function upsertThread(db, input) {
       .get(projectId);
     db.prepare(
       `INSERT INTO threads
-         (project_id, thread_key, port, current, next, memo, status, session_id, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (project_id, thread_key, port, current, next, memo, status, session_id, worktree, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       projectId,
       input.thread,
@@ -147,6 +151,7 @@ export function upsertThread(db, input) {
       input.memo,
       input.status ?? "run",
       input.sessionId ?? null,
+      input.worktree ?? null,
       maxOrder.m + 1,
     );
   }
