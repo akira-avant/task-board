@@ -203,22 +203,29 @@ export function markMessageRead(db, id) {
  */
 export function messageCounts(db) {
   const map = new Map();
-  const bump = (tid, unread) => {
-    const c = map.get(tid) ?? { unread: 0, total: 0 };
-    c.total += 1;
-    c.unread += unread;
-    map.set(tid, c);
-  };
-  const rows = db
+  // 宛先側: total (受信数) と unread (自分宛未読数)。idx_messages_to (to_thread_id, read_at) を使う。
+  const toRows = db
     .prepare(
-      `SELECT from_thread_id AS f, to_thread_id AS t,
-              (read_at IS NULL) AS u
-       FROM messages`,
+      `SELECT to_thread_id AS id, COUNT(*) AS total, SUM(read_at IS NULL) AS unread
+       FROM messages
+       GROUP BY to_thread_id`,
     )
     .all();
-  for (const r of rows) {
-    bump(r.t, r.u ? 1 : 0);
-    bump(r.f, 0);
+  for (const r of toRows) {
+    map.set(r.id, { unread: r.unread, total: r.total });
+  }
+  // 送信側: total に加算のみ (自分が送った分は未読にならない)。idx_messages_from を使う。
+  const fromRows = db
+    .prepare(
+      `SELECT from_thread_id AS id, COUNT(*) AS total
+       FROM messages
+       GROUP BY from_thread_id`,
+    )
+    .all();
+  for (const r of fromRows) {
+    const c = map.get(r.id) ?? { unread: 0, total: 0 };
+    c.total += r.total;
+    map.set(r.id, c);
   }
   return map;
 }
