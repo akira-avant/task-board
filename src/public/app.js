@@ -378,6 +378,11 @@ function destroySortables() {
   while (sortables.length) sortables.pop().destroy();
 }
 
+// threads の sortOrder はサーバーに保存されるが、表示順は sortThreads() が
+// port / updatedAt から毎回算出するため実際には使われない (意図的)。
+// Sortable 側は sort:false でリスト内並び替えを無効化しているので、ここでの
+// index はプロジェクト間移動後の DOM 順をそのまま送っているだけ。
+// API 後方互換のためフィールド自体は残す。
 function collectOrder() {
   const groupEls = [...projectsEl.querySelectorAll(":scope > .group")];
   const projects = groupEls.map((el, i) => ({
@@ -416,6 +421,11 @@ async function onDragEnd() {
 //   これでドラッグ中もページのホイールスクロールがそのまま効く。
 // - scroll / scrollSensitivity / scrollSpeed: AutoScroll プラグイン。
 //   ポインタを画面端 (上端含む) に当てると自動でスクロールする。
+// - invertSwap: 背の高い要素を、より短い末尾要素の下へ落とせるようにする
+//   (デフォルトの swapThreshold だと末尾への drop が閾値を越えられない)。
+//   プロジェクト自体の並び替え (projectsEl) でのみ意味を持つ。スレッドの
+//   card-grid / task-list は sort:false でリスト内並び替え自体を無効化して
+//   いるため、この設定は実質無効 (invertSwap が効く場面が発生しない)。
 const DND_COMMON = {
   animation: 120,
   ghostClass: "dragging",
@@ -425,8 +435,6 @@ const DND_COMMON = {
   scrollSensitivity: 90,
   scrollSpeed: 14,
   bubbleScroll: true,
-  // 背の高い要素を、より短い末尾要素の下へ落とせるようにする
-  // (デフォルトの swapThreshold だと末尾への drop が閾値を越えられない)。
   invertSwap: true,
   onStart: onDragStart,
   onEnd: onDragEnd,
@@ -449,6 +457,10 @@ function initSortables() {
       Sortable.create(grid, {
         ...DND_COMMON,
         group: "threads",
+        // sort:false = 同一プロジェクト内の並び替えは不可 (表示順は
+        // sortThreads() が port/updatedAt から決めるため並び替えても戻る)。
+        // group による他プロジェクトへの移動 (put/pull) は従来通り可能。
+        sort: false,
         draggable: ".agent-card",
         handle: ".ac-top",
         filter: ".ac-del, .ac-status, .ac-msg, .inline-edit",
@@ -461,6 +473,8 @@ function initSortables() {
       Sortable.create(list, {
         ...DND_COMMON,
         group: "threads",
+        // 同上: 同一プロジェクト内の並び替えは無効、プロジェクト間移動のみ可。
+        sort: false,
         draggable: ".task-item",
         handle: ".task-item",
         filter: ".task-check, .task-star, .task-expand, .inline-edit",
