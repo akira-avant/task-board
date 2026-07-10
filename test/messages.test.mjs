@@ -149,6 +149,30 @@ describe("messages", () => {
     assert.deepEqual(counts.get(sender.id), { unread: 0, total: 2 });
   });
 
+  it("messageCounts は双方向会話・既読混在でも total/unread を正しく合成する", () => {
+    const m1 = send(db, { body: "m1" }).message; // p1 -> p2
+    send(db, { body: "m2" }); // p1 -> p2
+    send(db, {
+      fromProject: "p2",
+      fromThread: "b",
+      toProject: "p1",
+      toThread: "a",
+      body: "r1",
+    }); // p2 -> p1
+    const a = resolveCard(db, "p1", "a");
+    const b = resolveCard(db, "p2", "b");
+    let counts = messageCounts(db);
+    // a: 送信2 (未読扱いしない) + 受信1 (未読) = total 3 / unread 1
+    assert.deepEqual(counts.get(a.id), { unread: 1, total: 3 });
+    // b: 受信2 (未読) + 送信1 = total 3 / unread 2
+    assert.deepEqual(counts.get(b.id), { unread: 2, total: 3 });
+
+    markMessageRead(db, m1.id);
+    counts = messageCounts(db);
+    assert.deepEqual(counts.get(b.id), { unread: 1, total: 3 }); // 既読化で unread のみ減る
+    assert.deepEqual(counts.get(a.id), { unread: 1, total: 3 }); // a 側は不変
+  });
+
   it("getBoard に unreadCount / messageCount が載る", () => {
     send(db);
     send(db, { body: "second" });
