@@ -77,6 +77,24 @@ async function readJson(req) {
   return JSON.parse(raw);
 }
 
+// リクエストボディを読取り→JSON parse→parser でバリデーションまで行う。
+// 失敗時は 400 応答を送信済みで null を返す (呼び出し側は return するだけでよい)。
+async function withJson(req, res, parser) {
+  let body;
+  try {
+    body = await readJson(req);
+  } catch {
+    sendJson(res, 400, { error: "invalid JSON" });
+    return null;
+  }
+  const parsed = parser(body);
+  if (parsed.error) {
+    sendJson(res, 400, { error: parsed.error });
+    return null;
+  }
+  return parsed.data;
+}
+
 function serveStatic(res, pathname) {
   const rel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const filePath = path.join(PUBLIC_DIR, rel);
@@ -112,54 +130,30 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && pathname === "/api/threads") {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
+    const data = await withJson(req, res, parsePostThread);
+    if (data === null) {
       return;
     }
-    const parsed = parsePostThread(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
-      return;
-    }
-    sendJson(res, 200, { thread: upsertThread(db, parsed.data) });
+    sendJson(res, 200, { thread: upsertThread(db, data) });
     return;
   }
 
   if (req.method === "POST" && pathname === "/api/board/reorder") {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
+    const data = await withJson(req, res, parseReorder);
+    if (data === null) {
       return;
     }
-    const parsed = parseReorder(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
-      return;
-    }
-    reorder(db, parsed.data);
+    reorder(db, data);
     sendJson(res, 200, { ok: true });
     return;
   }
 
   if (req.method === "POST" && pathname === "/api/messages") {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
+    const data = await withJson(req, res, parsePostMessage);
+    if (data === null) {
       return;
     }
-    const parsed = parsePostMessage(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
-      return;
-    }
-    const result = sendMessage(db, parsed.data);
+    const result = sendMessage(db, data);
     if (result.error) {
       sendJson(res, result.status, { error: result.error });
       return;
@@ -198,16 +192,8 @@ async function handleApi(req, res, url) {
 
   const messageMatch = pathname.match(/^\/api\/messages\/(\d+)$/);
   if (req.method === "PATCH" && messageMatch) {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
-      return;
-    }
-    const parsed = parseUpdateMessage(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
+    const data = await withJson(req, res, parseUpdateMessage);
+    if (data === null) {
       return;
     }
     if (!markMessageRead(db, Number(messageMatch[1]))) {
@@ -232,19 +218,11 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "PATCH" && threadMatch) {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
+    const data = await withJson(req, res, parseUpdateThread);
+    if (data === null) {
       return;
     }
-    const parsed = parseUpdateThread(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
-      return;
-    }
-    const updated = updateThread(db, Number(threadMatch[1]), parsed.data);
+    const updated = updateThread(db, Number(threadMatch[1]), data);
     if (!updated) {
       sendJson(res, 404, { error: "not found" });
       return;
@@ -255,19 +233,11 @@ async function handleApi(req, res, url) {
 
   const projectMatch = pathname.match(/^\/api\/projects\/(\d+)$/);
   if (req.method === "PATCH" && projectMatch) {
-    let body;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: "invalid JSON" });
+    const data = await withJson(req, res, parseUpdateProject);
+    if (data === null) {
       return;
     }
-    const parsed = parseUpdateProject(body);
-    if (parsed.error) {
-      sendJson(res, 400, { error: parsed.error });
-      return;
-    }
-    const updated = updateProject(db, Number(projectMatch[1]), parsed.data);
+    const updated = updateProject(db, Number(projectMatch[1]), data);
     if (!updated) {
       sendJson(res, 404, { error: "not found" });
       return;
