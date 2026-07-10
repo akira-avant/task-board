@@ -323,6 +323,12 @@ export function updateProject(db, id, patch) {
 
 // UPDATE を 1 文ずつ autocommit すると fsync 回数が並び替え件数分かかり遅い上、
 // 途中で例外が起きると並び順が部分適用のまま残る。全体を 1 トランザクションに包む。
+//
+// threads.sort_order はここで保存されるが、表示順の算出には使われない
+// (app.js の sortThreads() が port/updatedAt から毎回算出する。カード DnD は
+// sort:false でリスト内並び替えを無効化しているため、意味があるのは
+// projectId の付け替え = プロジェクト間移動のみ)。API 後方互換のため
+// カラム自体・payload の sortOrder フィールドは維持している。
 export function reorder(db, input) {
   const projectStmt = db.prepare(
     "UPDATE projects SET sort_order = ? WHERE id = ?",
