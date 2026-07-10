@@ -8,6 +8,7 @@ import {
   getBoard,
   pruneEmptyProjects,
   reorder,
+  threadExists,
   updateProject,
   updateThread,
   upsertThread,
@@ -187,8 +188,7 @@ async function handleApi(req, res, url) {
   const threadMessagesMatch = pathname.match(/^\/api\/threads\/(\d+)\/messages$/);
   if (req.method === "GET" && threadMessagesMatch) {
     const id = Number(threadMessagesMatch[1]);
-    const exists = db.prepare("SELECT 1 FROM threads WHERE id = ?").get(id);
-    if (!exists) {
+    if (!threadExists(db, id)) {
       sendJson(res, 404, { error: "not found" });
       return;
     }

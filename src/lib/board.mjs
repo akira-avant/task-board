@@ -281,6 +281,11 @@ export function deleteThread(db, id) {
   return info.changes > 0;
 }
 
+/** id のスレッドが存在するか。 */
+export function threadExists(db, id) {
+  return db.prepare("SELECT 1 FROM threads WHERE id = ?").get(id) !== undefined;
+}
+
 /** プロジェクトを削除する。FK の ON DELETE CASCADE で配下スレッドも消える。 */
 export function deleteProject(db, id) {
   const info = db.prepare("DELETE FROM projects WHERE id = ?").run(id);
