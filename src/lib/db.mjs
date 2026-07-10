@@ -91,6 +91,9 @@ export function getDb() {
     fs.mkdirSync(DB_DIR, { recursive: true });
   }
   const db = new DatabaseSync(DB_PATH);
+  // ローカル単一プロセス向けに書き込みレイテンシを下げる (in-memory DB には不要)
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = NORMAL");
   initSchema(db);
   cached = db;
   return db;
