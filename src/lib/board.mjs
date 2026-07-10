@@ -313,18 +313,28 @@ export function updateProject(db, id, patch) {
   return info.changes > 0;
 }
 
+// UPDATE を 1 文ずつ autocommit すると fsync 回数が並び替え件数分かかり遅い上、
+// 途中で例外が起きると並び順が部分適用のまま残る。全体を 1 トランザクションに包む。
 export function reorder(db, input) {
   const projectStmt = db.prepare(
     "UPDATE projects SET sort_order = ? WHERE id = ?",
   );
-  for (const p of input.projects ?? []) {
-    projectStmt.run(p.sortOrder, p.id);
-  }
   const threadStmt = db.prepare(
     "UPDATE threads SET project_id = ?, sort_order = ? WHERE id = ?",
   );
-  for (const t of input.threads ?? []) {
-    threadStmt.run(t.projectId, t.sortOrder, t.id);
+
+  db.exec("BEGIN");
+  try {
+    for (const p of input.projects ?? []) {
+      projectStmt.run(p.sortOrder, p.id);
+    }
+    for (const t of input.threads ?? []) {
+      threadStmt.run(t.projectId, t.sortOrder, t.id);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
   }
 }
 
