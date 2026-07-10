@@ -6,6 +6,7 @@ import {
   deleteThread,
   getBoard,
   reorder,
+  threadExists,
   updateProject,
   updateThread,
   upsertThread,
@@ -66,6 +67,15 @@ describe("board", () => {
     const t = post(db, { project: "p", thread: "t" });
     assert.equal(deleteThread(db, t.id), true);
     assert.equal(getBoard(db)[0].threads.length, 0);
+  });
+
+  it("threadExists は存在するスレッドで true", () => {
+    const t = post(db, { project: "p", thread: "t" });
+    assert.equal(threadExists(db, t.id), true);
+  });
+
+  it("threadExists は存在しない id で false", () => {
+    assert.equal(threadExists(db, 999999), false);
   });
 
   it("プロジェクト削除で配下スレッドも消える (cascade)", () => {
