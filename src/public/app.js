@@ -26,6 +26,7 @@ let dialogOpen = false;
 let live = true;
 let query = "";
 let board = [];
+let lastRenderKey = null; // ポーリングでの render スキップ判定用シグネチャ
 const sortables = [];
 const doneCollapsed = new Set();
 const expandedRows = new Set();
@@ -492,7 +493,18 @@ async function load() {
   board = data.projects;
   // 開いている会話ログは 5 秒自動更新に合わせて再取得する
   await Promise.all([...msgExpanded].map(fetchConversation));
-  render(board);
+  // board / 検索クエリ / 開いている会話ログの内容が前回ポーリング時と完全に一致するなら
+  // render (innerHTML 全再構築 + Sortable 再生成) をスキップし、DnD やホバー状態を保つ。
+  // render() は検索欄・メッセージ展開・Next/Memo展開などの UI 操作からも直接呼ばれるが、
+  // それらは常に即再描画したいのでこのスキップ判定を経由しない (load() 専用)。
+  const msgSnapshot = [...msgExpanded]
+    .sort((a, b) => a - b)
+    .map((id) => [id, msgCache.get(id)]);
+  const renderKey = JSON.stringify([board, query, msgSnapshot]);
+  if (renderKey !== lastRenderKey) {
+    render(board);
+    lastRenderKey = renderKey;
+  }
   updateLastUpdated();
 }
 
