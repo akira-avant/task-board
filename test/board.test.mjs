@@ -209,6 +209,28 @@ describe("board", () => {
     assert.equal(t.current, "v2");
   });
 
+  it("reorder は途中で例外が起きたら全 UPDATE をロールバックする (部分適用なし)", () => {
+    const a = post(db, { project: "p1", thread: "t1" });
+    const b = post(db, { project: "p1", thread: "t2" });
+    const before = getBoard(db)
+      .find((p) => p.name === "p1")
+      .threads.map((t) => ({ id: t.id, sortOrder: t.sortOrder }));
+
+    assert.throws(() => {
+      reorder(db, {
+        threads: [
+          { id: a.id, projectId: a.projectId, sortOrder: 99 }, // 先に適用される
+          { id: b.id, projectId: 999999, sortOrder: 1 }, // 存在しない projectId → FK 制約違反
+        ],
+      });
+    });
+
+    const after = getBoard(db)
+      .find((p) => p.name === "p1")
+      .threads.map((t) => ({ id: t.id, sortOrder: t.sortOrder }));
+    assert.deepEqual(after, before, "例外前に適用された UPDATE も巻き戻ること");
+  });
+
   it("reorder でプロジェクトの並びを更新する", () => {
     post(db, { project: "p1", thread: "t1" });
     post(db, { project: "p2", thread: "t2" });
