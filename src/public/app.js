@@ -542,6 +542,10 @@ function startInlineEdit(el) {
         body: JSON.stringify({ [field]: editor.value }),
       });
     }
+    // キャンセルや無変更保存では board データが変わらず render がスキップされ、
+    // textarea/input が DOM に残ったままになる。編集 UI を確実に閉じるため
+    // 強制的に再描画させる。
+    lastRenderKey = null;
     await load();
   };
   editor.addEventListener("keydown", (ev) => {
