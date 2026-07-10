@@ -29,3 +29,4 @@ npm-debug.log*
 # dev server logs / 一時ファイル
 .claude-dev/
 /tmp/
+/.claude-dev/
