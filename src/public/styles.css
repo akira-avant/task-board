@@ -70,10 +70,6 @@
   --red-soft: #f0d6cc;
   --red-bg: #f8e6dd;
 
-  --burgundy: #7a2e3a;
-  --burgundy-2: #3a1e24;
-  --burgundy-tint: #f5e6e3;
-
   --ok: #4a7a3a;
   --ok-bg: #dfe8d4;
   --warn: #b2731a;
@@ -85,8 +81,17 @@
   --r-md: 5px;
   --r-lg: 8px;
 
-  --font-display: "Caveat Brush", "Shadows Into Light Two", cursive;
-  --font-hand: "Shadows Into Light", "Caveat", cursive;
+  /* 紙質感の共通ボーダー/ハードシャドウ (border: 1.5px solid var(--ink) + オフセットシャドウ) */
+  --border-ink: 1.5px solid var(--ink);
+  --shadow-hard-sm: 1.5px 1.5px 0 var(--ink);
+  --shadow-hard: 2px 2px 0 var(--ink);
+  --shadow-hard-md: 3px 3px 0 var(--ink);
+  --shadow-hard-lg: 5px 5px 0 var(--ink);
+  --shadow-hard-xl: 6px 6px 0 var(--ink);
+  --shadow-hard-flat: 0 0 0 var(--ink);
+
+  --font-display: "Caveat Brush", "Shadows Into Light", cursive;
+  --font-hand: "Shadows Into Light", "Caveat Brush", cursive;
   --font-body: "Inter", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo",
     system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Consolas", Menlo, monospace;
@@ -154,7 +159,7 @@ button {
   height: 64px;
   padding: 0 28px;
   background: var(--paper-2);
-  border-bottom: 1.5px solid var(--ink);
+  border-bottom: var(--border-ink);
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -229,14 +234,14 @@ button {
   align-items: center;
   gap: 8px;
   background: var(--paper-3);
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-md);
   padding: 6px 12px;
   width: 260px;
   min-width: 130px;
   flex-shrink: 1;
   color: var(--ink-4);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--shadow-hard);
 }
 .search svg {
   flex: 0 0 auto;
@@ -261,10 +266,10 @@ button {
   font-family: var(--font-hand);
   font-weight: 500;
   letter-spacing: 0.04em;
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   background: var(--paper-2);
   color: var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--shadow-hard);
   transition:
     transform 80ms,
     box-shadow 80ms;
@@ -272,11 +277,11 @@ button {
 }
 .btn:hover {
   transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--shadow-hard-md);
 }
 .btn:active {
   transform: translate(1px, 1px);
-  box-shadow: 0 0 0 var(--ink);
+  box-shadow: var(--shadow-hard-flat);
 }
 .btn.primary {
   background: var(--red);
@@ -290,7 +295,7 @@ button {
   align-items: center;
   gap: 8px;
   padding: 5px 12px 5px 10px;
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: 999px;
   background: var(--paper-3);
   font-family: var(--font-hand);
@@ -298,7 +303,7 @@ button {
   color: var(--ink-2);
   letter-spacing: 0.02em;
   white-space: nowrap;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--shadow-hard);
   flex-shrink: 0;
 }
 .live-pill .dot {
@@ -389,11 +394,11 @@ button {
 /* ===== Group (collapsible section ticket) ===== */
 .group {
   background: var(--paper-2);
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-lg);
   margin-bottom: 20px;
   overflow: hidden;
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--shadow-hard-md);
 }
 .group.dragging {
   opacity: 0.5;
@@ -402,7 +407,7 @@ button {
 .sortable-fallback {
   opacity: 0.9 !important;
   cursor: grabbing;
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--shadow-hard-lg);
   pointer-events: none;
 }
 .group-head {
@@ -411,7 +416,7 @@ button {
   gap: 12px;
   padding: 13px 18px;
   background: var(--paper-3);
-  border-bottom: 1.5px solid var(--ink);
+  border-bottom: var(--border-ink);
   cursor: grab;
   user-select: none;
 }
@@ -452,7 +457,7 @@ button {
   height: 24px;
   padding: 0 7px;
   border-radius: 999px;
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   background: var(--paper-2);
   font-family: var(--font-hand);
   font-size: 13px;
@@ -525,9 +530,9 @@ button {
 .agent-card {
   position: relative;
   background: var(--paper-2);
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-lg);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--shadow-hard-md);
   padding: 12px 16px 13px;
   transition:
     transform 90ms,
@@ -535,7 +540,7 @@ button {
 }
 .agent-card:hover {
   transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--shadow-hard-lg);
 }
 .agent-card.dragging {
   opacity: 0.5;
@@ -555,13 +560,13 @@ button {
   align-items: baseline;
   gap: 7px;
   padding: 3px 10px;
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-sm);
   background: var(--red-bg);
   font-family: var(--font-mono);
   font-size: 12.5px;
   transform: rotate(-0.6deg);
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--shadow-hard-sm);
 }
 .port-tag .port {
   color: var(--red-2);
@@ -777,12 +782,15 @@ button {
 .task-check:hover {
   border-color: var(--ink);
 }
-.task-check .ck {
+/* .ck: 完了チェックマーク (V字)。.task-check と .done-item .ring の丸ボタンで共用。 */
+.ck {
   width: 9px;
   height: 5px;
   border-left: 2px solid var(--paper-3);
   border-bottom: 2px solid var(--paper-3);
   transform: rotate(-45deg) translate(0, -1px);
+}
+.task-check .ck {
   opacity: 0;
 }
 .task-check.on {
@@ -856,13 +864,13 @@ button {
 }
 .task-add-form input {
   flex: 1;
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   background: var(--paper-3);
   border-radius: var(--r-md);
   padding: 8px 12px;
   font-size: 13.5px;
   color: var(--ink);
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: var(--shadow-hard);
   outline: none;
 }
 
@@ -965,13 +973,6 @@ button {
   display: grid;
   place-items: center;
 }
-.done-item .ring .ck {
-  width: 9px;
-  height: 5px;
-  border-left: 2px solid var(--paper-3);
-  border-bottom: 2px solid var(--paper-3);
-  transform: rotate(-45deg) translate(0, -1px);
-}
 .done-item .dt {
   font-size: 13px;
   color: var(--ink-5);
@@ -994,12 +995,12 @@ button {
   line-height: 1.5;
   color: var(--ink);
   background: var(--paper-3);
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-sm);
   padding: 2px 6px;
   width: 100%;
   box-sizing: border-box;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--shadow-hard-sm);
   outline: none;
 }
 textarea.inline-edit {
@@ -1012,7 +1013,7 @@ textarea.inline-edit {
   border: 1.5px dashed var(--ink-4);
   border-radius: var(--r-lg);
   padding: 18px 20px;
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: var(--shadow-hard-md);
 }
 .empty-state p {
   margin: 0 0 10px;
@@ -1036,13 +1037,13 @@ textarea.inline-edit {
 
 /* ===== Dialog (add / rename) — paper ===== */
 .dialog {
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-lg);
   background: var(--paper-2);
   color: var(--ink);
   padding: 0;
   width: min(440px, 92vw);
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: var(--shadow-hard-xl);
 }
 .dialog::backdrop {
   background: rgba(26, 20, 16, 0.4);
@@ -1078,11 +1079,11 @@ textarea.inline-edit {
   font-size: 13px;
   color: var(--ink);
   background: var(--paper-3);
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-sm);
   padding: 7px 9px;
   width: 100%;
-  box-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: var(--shadow-hard-sm);
 }
 .dialog input:focus,
 .dialog textarea:focus {
@@ -1093,7 +1094,7 @@ textarea.inline-edit {
   min-height: 38px;
 }
 .layout-field {
-  border: 1.5px solid var(--ink);
+  border: var(--border-ink);
   border-radius: var(--r-sm);
   padding: 6px 10px 8px;
   margin: 0;
