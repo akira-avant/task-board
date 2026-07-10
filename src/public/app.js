@@ -21,6 +21,40 @@ const pName = document.getElementById("p-name");
 
 const JSON_H = { "content-type": "application/json" };
 
+// 薄い API クライアント。fetch はここに集約し、呼び出し側は Response を受け取る
+// (res.ok / エラー JSON 参照など既存の挙動は呼び出し側にそのまま残す)。
+const api = {
+  getBoard: () => fetch("/api/board", { cache: "no-store" }),
+  postThread: (body) =>
+    fetch("/api/threads", {
+      method: "POST",
+      headers: JSON_H,
+      body: JSON.stringify(body),
+    }),
+  patchThread: (id, body) =>
+    fetch(`/api/threads/${id}`, {
+      method: "PATCH",
+      headers: JSON_H,
+      body: JSON.stringify(body),
+    }),
+  deleteThread: (id) => fetch(`/api/threads/${id}`, { method: "DELETE" }),
+  patchProject: (id, body) =>
+    fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: JSON_H,
+      body: JSON.stringify(body),
+    }),
+  deleteProject: (id) => fetch(`/api/projects/${id}`, { method: "DELETE" }),
+  reorder: (body) =>
+    fetch("/api/board/reorder", {
+      method: "POST",
+      headers: JSON_H,
+      body: JSON.stringify(body),
+    }),
+  conversation: (id) =>
+    fetch(`/api/threads/${id}/messages`, { cache: "no-store" }),
+};
+
 let dragging = false;
 let dialogOpen = false;
 let live = true;
@@ -139,15 +173,19 @@ function kvValue(field, v) {
   return `<span class="${cls}" data-tid-field="${field}" data-raw="${esc}">${inner}</span>`;
 }
 
+// cardExtra / taskDetail 共通の K/V 行テンプレート。edit: "multi" (既定) | "line"。
+// "line" は richText 装飾をかけずエスケープ済みテキストをそのまま表示する。
+function kvRow(field, label, v, edit = "multi") {
+  const empty = v == null || v === "";
+  const esc = empty ? "" : escapeHtml(String(v));
+  const shown = edit === "line" ? esc : richText(esc);
+  return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="${edit}" data-raw="${esc}">${empty ? "—" : shown}</span>`;
+}
+
 function cardExtra(t) {
-  const row = (field, label, v) => {
-    const empty = v == null || v === "";
-    const esc = empty ? "" : escapeHtml(String(v));
-    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="multi" data-raw="${esc}">${empty ? "—" : richText(esc)}</span>`;
-  };
   return `<div class="ac-extra">
-    ${row("next", "Next", t.next)}
-    ${row("memo", "Memo", t.memo)}
+    ${kvRow("next", "Next", t.next)}
+    ${kvRow("memo", "Memo", t.memo)}
   </div>`;
 }
 
@@ -214,16 +252,10 @@ function agentCard(t, projectName) {
 
 /* ---- Task item (inline layout) ---- */
 function taskDetail(t) {
-  const row = (field, label, v, edit) => {
-    const empty = v == null || v === "";
-    const esc = empty ? "" : escapeHtml(String(v));
-    const shown = edit === "line" ? esc : richText(esc);
-    return `<div class="k">${label}</div><span class="v editable${empty ? " empty" : ""}" data-tid-field="${field}" data-edit="${edit}" data-raw="${esc}">${empty ? "—" : shown}</span>`;
-  };
   return `<div class="task-detail" data-tid="${t.id}">
-    ${row("next", "Next", t.next, "multi")}
-    ${row("memo", "Memo", t.memo, "multi")}
-    ${row("port", "Port", t.port, "line")}
+    ${kvRow("next", "Next", t.next, "multi")}
+    ${kvRow("memo", "Memo", t.memo, "multi")}
+    ${kvRow("port", "Port", t.port, "line")}
   </div>`;
 }
 
@@ -363,11 +395,7 @@ function collectOrder() {
 }
 
 async function persistOrder() {
-  await fetch("/api/board/reorder", {
-    method: "POST",
-    headers: JSON_H,
-    body: JSON.stringify(collectOrder()),
-  });
+  await api.reorder(collectOrder());
 }
 
 function onDragStart() {
@@ -467,9 +495,7 @@ function updateLastUpdated() {
 
 async function fetchConversation(id) {
   try {
-    const res = await fetch(`/api/threads/${id}/messages`, {
-      cache: "no-store",
-    });
+    const res = await api.conversation(id);
     if (res.ok) msgCache.set(id, (await res.json()).messages);
   } catch {
     // offline 中は既存キャッシュを表示し続ける
@@ -487,7 +513,7 @@ async function toggleMessages(id) {
 }
 
 async function load() {
-  const res = await fetch("/api/board", { cache: "no-store" });
+  const res = await api.getBoard();
   if (!res.ok) return;
   const data = await res.json();
   board = data.projects;
@@ -536,11 +562,7 @@ function startInlineEdit(el) {
     if (settled) return;
     settled = true;
     if (save && editor.value.trim() !== value.trim()) {
-      await fetch(`/api/threads/${id}`, {
-        method: "PATCH",
-        headers: JSON_H,
-        body: JSON.stringify({ [field]: editor.value }),
-      });
+      await api.patchThread(id, { [field]: editor.value });
     }
     // キャンセルや無変更保存では board データが変わらず render がスキップされ、
     // textarea/input が DOM に残ったままになる。編集 UI を確実に閉じるため
@@ -602,11 +624,7 @@ async function submitCard(e) {
     memo: fMemo.value,
     layout: cardForm.querySelector("input[name=layout]:checked").value,
   };
-  const res = await fetch("/api/threads", {
-    method: "POST",
-    headers: JSON_H,
-    body: JSON.stringify(payload),
-  });
+  const res = await api.postThread(payload);
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     cardError.textContent = `保存に失敗: ${j.error ?? res.status}`;
@@ -630,21 +648,13 @@ async function submitProject(e) {
   const pid = projectForm.dataset.pid;
   const name = pName.value.trim();
   if (!name) return;
-  await fetch(`/api/projects/${pid}`, {
-    method: "PATCH",
-    headers: JSON_H,
-    body: JSON.stringify({ name }),
-  });
+  await api.patchProject(pid, { name });
   projectDialog.close();
   await load();
 }
 
 async function patchThread(id, body) {
-  await fetch(`/api/threads/${id}`, {
-    method: "PATCH",
-    headers: JSON_H,
-    body: JSON.stringify(body),
-  });
+  await api.patchThread(id, body);
   await load();
 }
 
@@ -693,11 +703,7 @@ projectsEl.addEventListener("click", async (e) => {
   const layoutBtn = e.target.closest(".proj-layout");
   if (layoutBtn) {
     const next = layoutBtn.dataset.layout === "card" ? "inline" : "card";
-    await fetch(`/api/projects/${layoutBtn.dataset.pid}`, {
-      method: "PATCH",
-      headers: JSON_H,
-      body: JSON.stringify({ layout: next }),
-    });
+    await api.patchProject(layoutBtn.dataset.pid, { layout: next });
     await load();
     return;
   }
@@ -713,7 +719,7 @@ projectsEl.addEventListener("click", async (e) => {
         `プロジェクト「${pdel.dataset.pname}」を削除しますか？ 配下のタスクもすべて消えます。`,
       )
     ) {
-      await fetch(`/api/projects/${pdel.dataset.pid}`, { method: "DELETE" });
+      await api.deleteProject(pdel.dataset.pid);
       await load();
     }
     return;
@@ -721,7 +727,7 @@ projectsEl.addEventListener("click", async (e) => {
   const del = e.target.closest(".ac-del");
   if (del) {
     del.closest(".agent-card").remove();
-    await fetch(`/api/threads/${del.dataset.del}`, { method: "DELETE" });
+    await api.deleteThread(del.dataset.del);
     await load();
     return;
   }
@@ -791,11 +797,7 @@ projectsEl.addEventListener("click", async (e) => {
     const section = head.closest(".group");
     const collapsed = !section.classList.contains("collapsed");
     section.classList.toggle("collapsed", collapsed);
-    await fetch(`/api/projects/${section.dataset.pid}`, {
-      method: "PATCH",
-      headers: JSON_H,
-      body: JSON.stringify({ collapsed }),
-    });
+    await api.patchProject(section.dataset.pid, { collapsed });
   }
 });
 
@@ -811,15 +813,11 @@ projectsEl.addEventListener("keydown", async (e) => {
   const project = board.find((p) => p.id === pid);
   if (!project) return;
   input.value = "";
-  await fetch("/api/threads", {
-    method: "POST",
-    headers: JSON_H,
-    body: JSON.stringify({
-      project: project.name,
-      thread: `t-${Math.random().toString(36).slice(2, 8)}`,
-      current: text,
-      layout: "inline",
-    }),
+  await api.postThread({
+    project: project.name,
+    thread: `t-${Math.random().toString(36).slice(2, 8)}`,
+    current: text,
+    layout: "inline",
   });
   await load();
   const again = projectsEl.querySelector(
