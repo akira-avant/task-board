@@ -78,7 +78,17 @@ export function getBoard(db) {
   }));
 }
 
-function ensureProject(db, name, layout) {
+/**
+ * プロジェクトを取得 (無ければ末尾に作成)。
+ * @param {object} [options]
+ * @param {string} [options.layout] 新規作成時の初期 layout。既存プロジェクトには
+ *   明示指定があった場合のみ反映する (再 Post での上書き挙動)。
+ * @param {boolean} [options.collapsedDefault] 新規作成時の初期 collapsed。既存
+ *   プロジェクトには影響しない (退避先プロジェクトの折りたたみ状態を Post で
+ *   勝手に変えないため)。
+ */
+function ensureProject(db, name, options = {}) {
+  const { layout, collapsedDefault = false } = options;
   const existing = db
     .prepare("SELECT id FROM projects WHERE name = ?")
     .get(name);
@@ -97,9 +107,9 @@ function ensureProject(db, name, layout) {
     .get();
   const info = db
     .prepare(
-      "INSERT INTO projects (name, sort_order, layout) VALUES (?, ?, ?)",
+      "INSERT INTO projects (name, sort_order, layout, collapsed) VALUES (?, ?, ?, ?)",
     )
-    .run(name, maxOrder.m + 1, layout ?? "card");
+    .run(name, maxOrder.m + 1, layout ?? "card", collapsedDefault ? 1 : 0);
   return Number(info.lastInsertRowid);
 }
 
@@ -108,7 +118,7 @@ function ensureProject(db, name, layout) {
  * @returns {Thread}
  */
 export function upsertThread(db, input) {
-  const projectId = ensureProject(db, input.project, input.layout);
+  const projectId = ensureProject(db, input.project, { layout: input.layout });
 
   const existing = db
     .prepare("SELECT id FROM threads WHERE project_id = ? AND thread_key = ?")
@@ -175,21 +185,7 @@ export const ARCHIVE_PROJECT_NAME = "削除済み";
 
 /** 退避用プロジェクトを取得 (無ければ末尾に折りたたみ状態で作成)。 */
 function ensureArchiveProject(db) {
-  const existing = db
-    .prepare("SELECT id FROM projects WHERE name = ?")
-    .get(ARCHIVE_PROJECT_NAME);
-  if (existing) {
-    return existing.id;
-  }
-  const maxOrder = db
-    .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM projects")
-    .get();
-  const info = db
-    .prepare(
-      "INSERT INTO projects (name, sort_order, layout, collapsed) VALUES (?, ?, 'card', 1)",
-    )
-    .run(ARCHIVE_PROJECT_NAME, maxOrder.m + 1);
-  return Number(info.lastInsertRowid);
+  return ensureProject(db, ARCHIVE_PROJECT_NAME, { collapsedDefault: true });
 }
 
 /**
@@ -246,17 +242,13 @@ export function archiveStalePortCards(db, port, keepThreadId) {
   return stale.length;
 }
 
-/** id 指定でスレッドの一部フィールドを更新 (done/starred トグル、編集)。 */
-export function updateThread(db, id, patch) {
-  const map = {
-    done: (v) => (v ? 1 : 0),
-    starred: (v) => (v ? 1 : 0),
-    status: (v) => v,
-    port: (v) => v ?? null,
-    current: (v) => v ?? null,
-    next: (v) => v ?? null,
-    memo: (v) => v ?? null,
-  };
+/**
+ * patch のうち map (フィールド名 → 変換関数) に対応するキーだけを動的な
+ * SET 句に組み立てる。patch[key] === undefined のフィールドは更新対象から
+ * 除外する (未指定と null 明示指定を区別するため)。
+ * @returns {{ sets: string[], values: unknown[] }}
+ */
+function buildPatch(map, patch) {
   const sets = [];
   const values = [];
   for (const [key, conv] of Object.entries(map)) {
@@ -265,6 +257,23 @@ export function updateThread(db, id, patch) {
       values.push(conv(patch[key]));
     }
   }
+  return { sets, values };
+}
+
+/** id 指定でスレッドの一部フィールドを更新 (done/starred トグル、編集)。 */
+export function updateThread(db, id, patch) {
+  const { sets, values } = buildPatch(
+    {
+      done: (v) => (v ? 1 : 0),
+      starred: (v) => (v ? 1 : 0),
+      status: (v) => v,
+      port: (v) => v ?? null,
+      current: (v) => v ?? null,
+      next: (v) => v ?? null,
+      memo: (v) => v ?? null,
+    },
+    patch,
+  );
   if (sets.length === 0) {
     return false;
   }
@@ -293,20 +302,14 @@ export function deleteProject(db, id) {
 }
 
 export function updateProject(db, id, patch) {
-  const sets = [];
-  const values = [];
-  if (patch.collapsed !== undefined) {
-    sets.push("collapsed = ?");
-    values.push(patch.collapsed ? 1 : 0);
-  }
-  if (patch.name !== undefined) {
-    sets.push("name = ?");
-    values.push(patch.name);
-  }
-  if (patch.layout !== undefined) {
-    sets.push("layout = ?");
-    values.push(patch.layout);
-  }
+  const { sets, values } = buildPatch(
+    {
+      collapsed: (v) => (v ? 1 : 0),
+      name: (v) => v,
+      layout: (v) => v,
+    },
+    patch,
+  );
   if (sets.length === 0) {
     return false;
   }
