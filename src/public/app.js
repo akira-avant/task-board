@@ -19,6 +19,19 @@ const projectDialog = document.getElementById("project-dialog");
 const projectForm = document.getElementById("project-form");
 const pName = document.getElementById("p-name");
 
+const memoBtn = document.getElementById("memo-btn");
+const memoDialog = document.getElementById("memo-dialog");
+const memoText = document.getElementById("memo-text");
+const memoRec = document.getElementById("memo-rec");
+const memoStop = document.getElementById("memo-stop");
+const memoCut = document.getElementById("memo-cut");
+const memoStatus = document.getElementById("memo-status");
+const memoError = document.getElementById("memo-error");
+const memoHistoryBtn = document.getElementById("memo-history-btn");
+const memoHistory = document.getElementById("memo-history");
+const memoFontDec = document.getElementById("memo-font-dec");
+const memoFontInc = document.getElementById("memo-font-inc");
+
 const JSON_H = { "content-type": "application/json" };
 
 // 薄い API クライアント。fetch はここに集約し、呼び出し側は Response を受け取る
@@ -677,12 +690,205 @@ addBtn.addEventListener("click", () => openCardDialog());
 cardForm.addEventListener("submit", submitCard);
 projectForm.addEventListener("submit", submitProject);
 
-for (const dlg of [cardDialog, projectDialog]) {
+for (const dlg of [cardDialog, projectDialog, memoDialog]) {
   dlg.addEventListener("close", () => {
     dialogOpen = false;
   });
   dlg.querySelector("[data-close]").addEventListener("click", () => dlg.close());
 }
+
+/* ---- memo (左上ノート popup) ----
+   ローカルツールなので個人スクラッチパッドとして localStorage に保存する
+   (サーバースキーマ変更なし)。音声録音は外部アプリ Aqua Voice を使う前提。
+   Aqua Voice はトグル式 (左Altダブルタップで録音 ON、もう一度で OFF) なので、
+   録音・停止ボタンはどちらも同じ「左Altダブルタップ」を送る:
+     録音 → /api/voice/start → 左Alt ダブルタップ (Aqua Voice ON)
+     停止 → /api/voice/stop  → 左Alt ダブルタップ (Aqua Voice OFF)
+   ブラウザ JS 単体では OS キーを送れないため、実キー送信は server.mjs の
+   /api/voice/* → tools/send_keys.ps1 が担う。合成キーを Aqua Voice の hook が
+   拾えないことがある (タイミング依存) ため、物理の左Alt2回が常に有効 (ガイド)。 */
+const MEMO_KEY = "taskboard.memo";
+const MEMO_HISTORY_KEY = "taskboard.memo.history";
+const MEMO_HISTORY_MAX = 50;
+const MEMO_FONT_KEY = "taskboard.memo.fontsize";
+const MEMO_FONT_DEFAULT = 14;
+const MEMO_FONT_MIN = 11;
+const MEMO_FONT_MAX = 28;
+const MEMO_FONT_STEP = 2;
+let recording = false;
+
+// メモ欄の文字サイズ (px)。localStorage に記憶し、次回開いた時も維持する。
+function loadFontSize() {
+  const n = Number(localStorage.getItem(MEMO_FONT_KEY));
+  return Number.isFinite(n) && n >= MEMO_FONT_MIN && n <= MEMO_FONT_MAX
+    ? n
+    : MEMO_FONT_DEFAULT;
+}
+function applyFontSize(px) {
+  const clamped = Math.min(MEMO_FONT_MAX, Math.max(MEMO_FONT_MIN, px));
+  memoText.style.fontSize = `${clamped}px`;
+  localStorage.setItem(MEMO_FONT_KEY, String(clamped));
+  memoFontDec.disabled = clamped <= MEMO_FONT_MIN;
+  memoFontInc.disabled = clamped >= MEMO_FONT_MAX;
+}
+
+function setRecording(on) {
+  recording = on;
+  memoRec.classList.toggle("recording", on);
+  memoStatus.hidden = !on;
+}
+
+// 切り取った文章の履歴 (localStorage)。[{ text, ts(epoch ms) }] を新しい順で保持。
+function loadHistory() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(MEMO_HISTORY_KEY) ?? "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+function pushHistory(text) {
+  const hist = loadHistory();
+  hist.unshift({ text, ts: Date.now() });
+  localStorage.setItem(
+    MEMO_HISTORY_KEY,
+    JSON.stringify(hist.slice(0, MEMO_HISTORY_MAX)),
+  );
+}
+function fmtHistTime(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+const COPY_ICON_SM =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>';
+
+function renderHistory() {
+  const hist = loadHistory();
+  if (hist.length === 0) {
+    memoHistory.innerHTML =
+      '<div class="memo-hist-empty">履歴はありません（切り取ると保存されます）</div>';
+    return;
+  }
+  memoHistory.innerHTML = hist
+    .map((h, i) => {
+      const preview = escapeHtml(h.text).replace(/\s*\n\s*/g, " ⏎ ");
+      return `<div class="memo-hist-item" data-hist="${i}" title="クリックでコピー">
+        <div class="memo-hist-body">
+          <div class="memo-hist-time">${fmtHistTime(h.ts)}</div>
+          <div class="memo-hist-text">${preview}</div>
+        </div>
+        <button type="button" class="memo-hist-copy" data-hist="${i}" aria-label="コピー">${COPY_ICON_SM}</button>
+      </div>`;
+    })
+    .join("");
+}
+
+function toggleHistory(force) {
+  const open = force ?? memoHistory.hidden;
+  if (open) renderHistory();
+  memoHistory.hidden = !open;
+  memoHistoryBtn.setAttribute("aria-expanded", String(open));
+}
+
+async function voiceApi(action) {
+  memoError.hidden = true;
+  try {
+    const res = await fetch(`/api/voice/${action}`, { method: "POST" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error || `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    memoError.textContent = `キー送出に失敗: ${err.message}（物理の左Alt2回で代替できます）`;
+    memoError.hidden = false;
+  }
+}
+
+memoBtn.addEventListener("click", () => {
+  memoError.hidden = true;
+  setRecording(false);
+  toggleHistory(false);
+  applyFontSize(loadFontSize());
+  memoText.value = localStorage.getItem(MEMO_KEY) ?? "";
+  dialogOpen = true;
+  memoDialog.showModal();
+  memoText.focus();
+});
+
+memoText.addEventListener("input", () => {
+  localStorage.setItem(MEMO_KEY, memoText.value);
+});
+
+// 録音: 先にメモ欄へフォーカス (Aqua Voice は focus 中のフィールドに入力する)
+// してから、OS レベルで左Alt ダブルタップを送出する。
+memoRec.addEventListener("click", async () => {
+  memoText.focus();
+  setRecording(true);
+  await voiceApi("start");
+});
+
+// 停止: 録音と同じ左Altダブルタップを送出して Aqua Voice をトグル OFF する。
+memoStop.addEventListener("click", async () => {
+  setRecording(false);
+  memoText.focus();
+  await voiceApi("stop");
+});
+
+// 切り取り: クリップボードへコピー → 履歴に保存 → メモ欄を空にする。
+memoCut.addEventListener("click", async () => {
+  const text = memoText.value;
+  if (!text.trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // clipboard 不可 (非セキュアコンテキスト等) でも切り取りは続行する
+  }
+  pushHistory(text);
+  memoText.value = "";
+  localStorage.setItem(MEMO_KEY, "");
+  if (!memoHistory.hidden) renderHistory();
+  memoCut.classList.add("cut");
+  setTimeout(() => memoCut.classList.remove("cut"), 900);
+  memoText.focus();
+});
+
+// 文字サイズの増減 (値は applyFontSize 内で localStorage に記憶)。
+memoFontDec.addEventListener("click", () =>
+  applyFontSize(loadFontSize() - MEMO_FONT_STEP),
+);
+memoFontInc.addEventListener("click", () =>
+  applyFontSize(loadFontSize() + MEMO_FONT_STEP),
+);
+
+// 履歴パネルの開閉。
+memoHistoryBtn.addEventListener("click", () => toggleHistory());
+
+// 履歴アイテム / コピーボタンのクリックで、その文章をクリップボードへコピー。
+memoHistory.addEventListener("click", async (e) => {
+  const item = e.target.closest(".memo-hist-item");
+  if (!item) return;
+  const idx = Number(item.dataset.hist);
+  const entry = loadHistory()[idx];
+  if (!entry) return;
+  try {
+    await navigator.clipboard.writeText(entry.text);
+  } catch {
+    // clipboard 不可時は無視 (視覚フィードバックのみ)
+  }
+  item.classList.add("copied");
+  setTimeout(() => item.classList.remove("copied"), 900);
+});
+
+memoDialog.addEventListener("close", () => {
+  if (recording) {
+    setRecording(false);
+    voiceApi("stop");
+  }
+  localStorage.setItem(MEMO_KEY, memoText.value);
+});
 
 searchInput.addEventListener("input", () => {
   query = searchInput.value;

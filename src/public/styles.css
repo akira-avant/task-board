@@ -1137,6 +1137,228 @@ textarea.inline-edit {
   margin-top: 4px;
 }
 
+/* ===== Memo (topbar note + popup) ===== */
+.memo-btn {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: var(--border-ink);
+  border-radius: var(--r-md);
+  background: var(--paper-3);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-hard);
+  flex-shrink: 0;
+  transition:
+    transform 80ms,
+    box-shadow 80ms;
+}
+.memo-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-hard-md);
+  color: var(--ink);
+}
+.memo-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: var(--shadow-hard-flat);
+}
+
+.memo-dialog {
+  width: min(560px, 94vw);
+}
+.memo-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.memo-tools .btn {
+  padding: 6px 12px;
+}
+.memo-tools .btn svg {
+  flex: 0 0 auto;
+}
+.memo-rec.recording {
+  background: var(--red);
+  color: var(--paper-3);
+  border-color: var(--ink);
+}
+.memo-fontsize {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.memo-font-btn {
+  padding: 4px 10px;
+  min-width: 34px;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-weight: 600;
+  line-height: 1;
+}
+#memo-font-dec {
+  font-size: 11px;
+}
+#memo-font-inc {
+  font-size: 16px;
+}
+.memo-font-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+  box-shadow: var(--shadow-hard);
+}
+.memo-cut.cut {
+  background: var(--ok-bg);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.memo-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-hand);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--red-2);
+  margin-left: 2px;
+}
+/* author の display:inline-flex は UA の [hidden]{display:none} を上書きするため、
+   hidden 属性を明示的に効かせる (でないと「録音中」が常時表示される)。 */
+.memo-status[hidden] {
+  display: none;
+}
+.rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: recpulse 1s ease-in-out infinite;
+}
+@keyframes recpulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.65);
+  }
+}
+.memo-hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-4);
+  background: var(--paper-3);
+  border: 1px dashed var(--paper-edge);
+  border-radius: var(--r-sm);
+  padding: 6px 9px;
+}
+.memo-hint b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+#memo-text {
+  min-height: 220px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 履歴ボタンは左下 (margin-right:auto で「閉じる」を右端へ押しやる) */
+.memo-history-btn {
+  margin-right: auto;
+}
+.memo-history-btn svg {
+  flex: 0 0 auto;
+}
+.memo-history {
+  border: var(--border-ink);
+  border-radius: var(--r-sm);
+  background: var(--paper-3);
+  box-shadow: var(--shadow-hard-sm);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  display: grid;
+  gap: 4px;
+}
+/* author の display:grid が UA の [hidden]{display:none} を上書きするため明示指定。 */
+.memo-history[hidden] {
+  display: none;
+}
+.memo-hist-empty {
+  color: var(--ink-5);
+  font-size: 12px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.memo-hist-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  background: var(--paper-2);
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  color: var(--ink);
+  transition:
+    transform 80ms,
+    box-shadow 80ms;
+}
+.memo-hist-item:hover {
+  border-color: var(--ink);
+  box-shadow: var(--shadow-hard-sm);
+  transform: translate(-1px, -1px);
+}
+.memo-hist-body {
+  min-width: 0;
+}
+.memo-hist-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  margin-bottom: 2px;
+}
+.memo-hist-text {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.memo-hist-copy {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--r-sm);
+  background: var(--paper-3);
+  color: var(--ink-4);
+}
+.memo-hist-copy:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.memo-hist-item.copied {
+  background: var(--ok-bg);
+  border-color: var(--ok);
+}
+.memo-hist-item.copied .memo-hist-copy {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
 /* ---- messages (エージェント間メッセージ) ---- */
 .ac-msg {
   border: 1px solid var(--paper-edge);

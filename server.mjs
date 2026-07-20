@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -33,6 +34,45 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "src", "public");
 const PORT = Number(process.env.PORT) || 8111;
+
+// メモ popup の音声録音ボタン用。ブラウザ JS からは OS キーを送れないので、
+// ローカルサーバーが PowerShell を spawn して OS レベルのキー入力を送出する:
+//   "voice" → 左Alt ダブルタップ (外部アプリ Aqua Voice の起動トリガ)
+//   "stop"  → ESC (Aqua Voice 停止)
+const KEY_SCRIPT = path.join(__dirname, "tools", "send_keys.ps1");
+function sendKeys(action) {
+  return new Promise((resolve) => {
+    if (process.platform !== "win32") {
+      resolve({ ok: false, error: "OS キー送出は Windows のみ対応です" });
+      return;
+    }
+    const ps = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        KEY_SCRIPT,
+        "-Action",
+        action,
+      ],
+      { windowsHide: true },
+    );
+    let stderr = "";
+    ps.stderr.on("data", (c) => {
+      stderr += c;
+    });
+    ps.on("error", (err) => resolve({ ok: false, error: err.message }));
+    ps.on("close", (code) =>
+      resolve(
+        code === 0
+          ? { ok: true }
+          : { ok: false, error: stderr.trim() || `exit ${code}` },
+      ),
+    );
+  });
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -135,6 +175,16 @@ async function handleApi(req, res, url) {
       return;
     }
     sendJson(res, 200, { thread: upsertThread(db, data) });
+    return;
+  }
+
+  if (
+    req.method === "POST" &&
+    (pathname === "/api/voice/start" || pathname === "/api/voice/stop")
+  ) {
+    const action = pathname.endsWith("/start") ? "voice" : "stop";
+    const result = await sendKeys(action);
+    sendJson(res, result.ok ? 200 : 500, result);
     return;
   }
 
