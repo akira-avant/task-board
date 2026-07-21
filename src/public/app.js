@@ -29,6 +29,7 @@ const memoStatus = document.getElementById("memo-status");
 const memoError = document.getElementById("memo-error");
 const memoHistoryBtn = document.getElementById("memo-history-btn");
 const memoHistory = document.getElementById("memo-history");
+const memoPopoutBtn = document.getElementById("memo-popout-btn");
 const memoFontDec = document.getElementById("memo-font-dec");
 const memoFontInc = document.getElementById("memo-font-inc");
 
@@ -906,6 +907,36 @@ memoFontInc.addEventListener("click", () =>
 
 // 履歴パネルの開閉。
 memoHistoryBtn.addEventListener("click", () => toggleHistory());
+
+// 別ウィンドウで開く (ポップアウト)。/memo.html を独立ウィンドウで開き、
+// このダイアログは閉じる。localStorage を共有し storage イベントで同期するので、
+// 別モニタや画面外に置いたまま録音・編集できる。
+memoPopoutBtn.addEventListener("click", () => {
+  const w = window.open("/memo.html", "taskboard-memo", "popup,width=460,height=620");
+  if (w) {
+    memoDialog.close();
+    w.focus();
+  } else {
+    memoError.textContent =
+      "別ウィンドウを開けませんでした（ブラウザのポップアップブロックを確認してください）";
+    memoError.hidden = false;
+  }
+});
+
+// ポップアウトや別ウィンドウでのメモ変更を、ダイアログが開いている間だけ反映する。
+// 自分が入力中 (memoText フォーカス) の時は本文を上書きしない (カーソル保持)。
+window.addEventListener("storage", (e) => {
+  if (!memoDialog.open) return;
+  if (e.key === MEMO_KEY) {
+    if (e.newValue !== null && document.activeElement !== memoText) {
+      memoText.value = e.newValue;
+    }
+  } else if (e.key === MEMO_HISTORY_KEY) {
+    if (!memoHistory.hidden) renderHistory();
+  } else if (e.key === MEMO_FONT_KEY) {
+    applyFontSize(loadFontSize());
+  }
+});
 
 // 履歴アイテム / コピーボタンのクリックで、その文章をクリップボードへコピー。
 memoHistory.addEventListener("click", async (e) => {

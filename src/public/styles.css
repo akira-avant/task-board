@@ -1151,6 +1151,51 @@ textarea.inline-edit {
   margin-top: 4px;
 }
 
+/* ===== Memo pop-out window (別ウィンドウ /memo.html) ===== */
+.memo-popout {
+  min-height: 100vh;
+}
+.memo-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 16px;
+  min-height: 100vh;
+}
+.memo-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.memo-pop-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+/* 独立ウィンドウの本文は .dialog textarea 配下ではないので、同等の見た目をここで指定。
+   flex:1 でウィンドウの縦いっぱいに広げる (#memo-text の min-height はそのまま効く)。 */
+.memo-pop textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper-3);
+  border: var(--border-ink);
+  border-radius: var(--r-sm);
+  padding: 9px 11px;
+  box-shadow: var(--shadow-hard-sm);
+}
+.memo-pop textarea:focus {
+  outline: none;
+}
+.memo-pop-foot {
+  display: flex;
+  align-items: center;
+}
+
 /* ===== Memo (topbar note + popup) ===== */
 .memo-btn {
   width: 36px;
