@@ -494,6 +494,12 @@ button {
 .twirl.danger:hover {
   color: var(--red-2);
 }
+/* ソート = 最新順が有効な間は押下状態を残す (トグルであることを明示)。 */
+.twirl.active {
+  border-color: var(--ink);
+  background: var(--paper-2);
+  color: var(--ink);
+}
 .group-body {
   padding: 18px;
 }
@@ -822,6 +828,14 @@ button {
 }
 .task-sub .mono {
   font-family: var(--font-mono);
+}
+.task-time {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-family: var(--font-hand);
+  font-size: 12px;
+  color: var(--ink-4);
+  white-space: nowrap;
 }
 .task-star {
   flex-shrink: 0;

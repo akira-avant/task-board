@@ -78,6 +78,9 @@ const sortables = [];
 const doneCollapsed = new Set();
 const expandedRows = new Set();
 const cardExpanded = new Set();
+// 並び順を既定からフリップしたプロジェクト id 集合。
+// 既定は card=ポート順 / inline=最新順。フリップで card=最新順 / inline=ポート順。
+const sortFlipped = new Set();
 const msgExpanded = new Set();
 const msgCache = new Map(); // threadId -> Message[]
 
@@ -111,6 +114,14 @@ function unescapeHtml(s) {
     .replace(/&amp;/g, "&");
 }
 
+// hover 用の絶対日時 (ローカル)。relativeTime と同じ UTC パースを使う。
+function absTime(sqliteUtc) {
+  const d = new Date(`${sqliteUtc.replace(" ", "T")}Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function relativeTime(sqliteUtc) {
   const then = new Date(`${sqliteUtc.replace(" ", "T")}Z`).getTime();
   if (Number.isNaN(then)) return "";
@@ -142,6 +153,9 @@ const LIST_ICON =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
 const GRID_ICON =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+// 降順ソート (長→短の横棒 + 下向き矢印)。「最新を上に」の並び替えを表す。
+const SORT_ICON =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h7M4 18h3M18 4v14m0 0 3-3m-3 3-3-3"/></svg>';
 
 const STATUS_LABEL = { run: "実行中", wait: "待機", done: "完了" };
 const STATUS_ORDER = ["run", "wait", "done"];
@@ -160,21 +174,35 @@ function whatOf(t) {
   return m ? m[1].trim() : "";
 }
 
-// 表示順: card layout = ポート昇順 (null 末尾、同 port は最新優先) /
-// inline layout = 最新順 (updatedAt 降順)。DnD の sort_order より優先する。
-function sortThreads(threads, layout) {
+// 表示順は mode で決める。DnD の sort_order より優先する。
+//   "port"   = ポート昇順 (null 末尾、同 port は最新優先)
+//   "newest" = 最新順 (updatedAt 降順)
+// mode はフィールドごとに sortModeFor() が既定 + フリップ状態から算出する。
+function byNewest(a, b) {
+  return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+}
+function sortThreads(threads, mode = "port") {
   const ts = [...threads];
-  if (layout === "inline") {
-    ts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  if (mode === "newest") {
+    ts.sort(byNewest);
   } else {
     ts.sort((a, b) => {
       const pa = a.port ?? Number.POSITIVE_INFINITY;
       const pb = b.port ?? Number.POSITIVE_INFINITY;
       if (pa !== pb) return pa - pb;
-      return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+      return byNewest(a, b);
     });
   }
   return ts;
+}
+
+// フィールドの並び順モード。既定は card=ポート順 / inline=最新順。
+// ソートボタンでフリップすると card=最新順 / inline=ポート順になる。
+function sortModeFor(project) {
+  const inlineDefault = (project.layout || "card") === "inline";
+  const flipped = sortFlipped.has(project.id);
+  const newest = inlineDefault ? !flipped : flipped;
+  return newest ? "newest" : "port";
 }
 
 /* ---- Agent card (cards layout) ---- */
@@ -280,6 +308,11 @@ function taskItem(t) {
   if (t.next) subs.push(`→ ${richText(escapeHtml(t.next))}`);
   const sub = subs.length ? `<div class="task-sub">${subs.join(" ")}</div>` : "";
   const expanded = expandedRows.has(t.id);
+  // 最終更新を右肩に相対時刻で表示 (最新順の並びが一目で読めるように)。
+  // hover で正確な日時。空更新のダミー行に備えて updatedAt が無ければ出さない。
+  const updated = t.updatedAt
+    ? `<span class="task-time" title="最終更新 ${absTime(t.updatedAt)}">${relativeTime(t.updatedAt)}</span>`
+    : "";
   return `
     <div class="task-item" data-tid="${t.id}">
       <button class="task-check" type="button" aria-label="完了にする" data-check="${t.id}"><span class="ck"></span></button>
@@ -287,6 +320,7 @@ function taskItem(t) {
         <div class="task-title editable" data-tid-field="current" data-edit="line" data-raw="${titleEsc}">${richText(titleEsc)}</div>
         ${sub}
       </div>
+      ${updated}
       <span class="task-expand${expanded ? " open" : ""}" aria-hidden="true">${CHEV_RIGHT}</span>
       <button class="task-star${t.starred ? " on" : ""}" type="button" aria-label="重要" data-star="${t.id}">${STAR}</button>
     </div>${expanded ? taskDetail(t) : ""}`;
@@ -302,7 +336,7 @@ function doneItem(t) {
 }
 
 function taskListBody(project) {
-  const ordered = sortThreads(project.threads, "inline");
+  const ordered = sortThreads(project.threads, sortModeFor(project));
   const active = ordered.filter((t) => !t.done);
   const done = ordered.filter((t) => t.done);
   const collapsed = doneCollapsed.has(project.id);
@@ -325,7 +359,7 @@ function cardBody(project) {
   // 存在せず、カードをこのプロジェクトへ移動できなくなるため。
   const inner = empty
     ? '<div class="group-empty">セッションはありません</div>'
-    : sortThreads(project.threads, "card")
+    : sortThreads(project.threads, sortModeFor(project))
         .map((t) => agentCard(t, project.name))
         .join("");
   return `<div class="card-grid${empty ? " is-empty" : ""}" data-pid="${project.id}">${inner}</div>`;
@@ -337,6 +371,12 @@ function group(project) {
   const toggleIcon = layout === "card" ? LIST_ICON : GRID_ICON;
   const toggleLabel = layout === "card" ? "インライン表示に切替" : "カード表示に切替";
   const name = escapeHtml(project.name);
+  // ソートトグルは両レイアウトに出す。ハイライト (active) = 最新順が有効。
+  const newest = sortModeFor(project) === "newest";
+  const sortTitle = newest
+    ? "並び順: 最新順 (クリックでポート順に)"
+    : "並び順: ポート順 (クリックで最新を上に)";
+  const sortBtn = `<button class="twirl proj-sort${newest ? " active" : ""}" type="button" aria-label="${newest ? "ポート順に並び替え" : "最新順に並び替え"}" title="${sortTitle}" aria-pressed="${newest}" data-pid="${project.id}">${SORT_ICON}</button>`;
   return `
     <section class="group${project.collapsed ? " collapsed" : ""}" data-pid="${project.id}" data-layout="${layout}">
       <div class="group-head">
@@ -344,6 +384,7 @@ function group(project) {
         <span class="gname" title="ドラッグで並べ替え">${name}</span>
         <div class="group-actions">
           <button class="twirl proj-add" type="button" aria-label="タスク追加" title="タスク追加" data-pname="${name}">${PLUS}</button>
+          ${sortBtn}
           <button class="twirl proj-layout" type="button" aria-label="${toggleLabel}" title="${toggleLabel}" data-pid="${project.id}" data-layout="${layout}">${toggleIcon}</button>
           <button class="twirl proj-rename" type="button" aria-label="名前変更" title="名前変更" data-pid="${project.id}" data-pname="${name}">${PENCIL}</button>
           <button class="twirl danger proj-del" type="button" aria-label="削除" title="プロジェクト削除" data-pid="${project.id}" data-pname="${name}">${TRASH}</button>
@@ -918,6 +959,14 @@ projectsEl.addEventListener("click", async (e) => {
   if (add) {
     const proj = board.find((p) => p.name === add.dataset.pname);
     openCardDialog({ project: add.dataset.pname, layout: proj?.layout });
+    return;
+  }
+  const sortBtn = e.target.closest(".proj-sort");
+  if (sortBtn) {
+    const pid = Number(sortBtn.dataset.pid);
+    if (sortFlipped.has(pid)) sortFlipped.delete(pid);
+    else sortFlipped.add(pid);
+    render(board);
     return;
   }
   const layoutBtn = e.target.closest(".proj-layout");
