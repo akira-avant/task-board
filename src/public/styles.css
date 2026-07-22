@@ -500,6 +500,12 @@ button {
   background: var(--paper-2);
   color: var(--ink);
 }
+/* 手動並び (DnD で固定) 中はピンを青系で強調し、自動ソートの押下状態と区別する。 */
+.twirl.proj-sort.manual {
+  border-color: var(--info);
+  background: var(--info-bg);
+  color: var(--info);
+}
 .group-body {
   padding: 18px;
 }
@@ -550,6 +556,16 @@ button {
 }
 .agent-card.dragging {
   opacity: 0.5;
+}
+/* Sortable の forceFallback ドラッグ中、ゴースト (複製) の transform を JS が
+   毎フレーム直接書き換えてカーソルに追従させる。.agent-card の
+   `transition: transform` が効くと補間が挟まってゴーストがカーソルに遅れて
+   追従し、マウス移動量とカードの移動量が一致しなくなる (2 列グリッドの
+   左右移動で特に顕著。縦リストの .task-item は transform トランジションを
+   持たないので問題が出ない)。ゴーストのトランジションを切って 1:1 追従にする。 */
+.agent-card.sortable-drag,
+.agent-card.sortable-fallback {
+  transition: none;
 }
 .ac-top {
   display: flex;

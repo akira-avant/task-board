@@ -157,6 +157,41 @@ describe("board", () => {
     assert.equal(p2After.threads.find((t) => t.id === a.id).sortOrder, 5);
   });
 
+  it("manualOrder はデフォルト false", () => {
+    post(db, { project: "p", thread: "t" });
+    assert.equal(getBoard(db)[0].manualOrder, false);
+  });
+
+  it("reorder の manualProjectIds でプロジェクトが手動並びに固定される", () => {
+    const a = post(db, { project: "p", thread: "t1" });
+    const b = post(db, { project: "p", thread: "t2" });
+    const pid = getBoard(db)[0].id;
+    // t2 を先頭 (sortOrder 0)、t1 を次 (1) に並べ替え、手動固定
+    reorder(db, {
+      threads: [
+        { id: b.id, projectId: pid, sortOrder: 0 },
+        { id: a.id, projectId: pid, sortOrder: 1 },
+      ],
+      manualProjectIds: [pid],
+    });
+    const proj = getBoard(db)[0];
+    assert.equal(proj.manualOrder, true);
+    // getBoard は sort_order 昇順で返すので手動順が保たれる
+    assert.deepEqual(
+      proj.threads.map((t) => t.id),
+      [b.id, a.id],
+    );
+  });
+
+  it("updateProject で manualOrder を解除できる (自動ソートに戻す)", () => {
+    post(db, { project: "p", thread: "t" });
+    const pid = getBoard(db)[0].id;
+    reorder(db, { threads: [], manualProjectIds: [pid] });
+    assert.equal(getBoard(db)[0].manualOrder, true);
+    updateProject(db, pid, { manualOrder: false });
+    assert.equal(getBoard(db)[0].manualOrder, false);
+  });
+
   it("同じ port の古いカードは Post 時に「削除済み」へ寄せられる", () => {
     // 旧 worktree のカード (port 3111)
     post(db, { project: "benchmark_app", thread: "old-wt", port: 3111 });

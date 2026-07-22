@@ -24,6 +24,7 @@ export function initSchema(db) {
       sort_order  INTEGER NOT NULL DEFAULT 0,
       collapsed   INTEGER NOT NULL DEFAULT 0,
       layout      TEXT NOT NULL DEFAULT 'card',
+      manual_order INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -65,6 +66,12 @@ export function initSchema(db) {
 
   // 既存 DB 向けマイグレーション (新規 DB では CREATE 時点で存在)
   ensureColumn(db, "projects", "layout", "layout TEXT NOT NULL DEFAULT 'card'");
+  ensureColumn(
+    db,
+    "projects",
+    "manual_order",
+    "manual_order INTEGER NOT NULL DEFAULT 0",
+  );
   ensureColumn(db, "threads", "done", "done INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "threads", "starred", "starred INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "threads", "status", "status TEXT NOT NULL DEFAULT 'run'");

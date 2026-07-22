@@ -119,6 +119,12 @@ export function parseUpdateProject(body) {
     }
     patch.layout = body.layout;
   }
+  if (body.manualOrder !== undefined) {
+    if (typeof body.manualOrder !== "boolean") {
+      return { error: "manualOrder must be boolean" };
+    }
+    patch.manualOrder = body.manualOrder;
+  }
   return { data: patch };
 }
 
@@ -152,6 +158,25 @@ function orderList(arr, withProject) {
   return out;
 }
 
+// 正の整数 id の配列を検証する (未指定は空配列扱い)。
+function idList(arr) {
+  if (arr === undefined) {
+    return [];
+  }
+  if (!Array.isArray(arr)) {
+    return null;
+  }
+  const out = [];
+  for (const v of arr) {
+    const id = Number(v);
+    if (!Number.isInteger(id) || id <= 0) {
+      return null;
+    }
+    out.push(id);
+  }
+  return out;
+}
+
 export function parseReorder(body) {
   if (typeof body !== "object" || body === null) {
     return { error: "body must be a JSON object" };
@@ -161,7 +186,11 @@ export function parseReorder(body) {
   if (projects === null || threads === null) {
     return { error: "invalid reorder payload" };
   }
-  return { data: { projects, threads } };
+  const manualProjectIds = idList(body.manualProjectIds);
+  if (manualProjectIds === null) {
+    return { error: "invalid reorder payload" };
+  }
+  return { data: { projects, threads, manualProjectIds } };
 }
 
 const MAX_MESSAGE_BODY = 4000;

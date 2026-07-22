@@ -19,6 +19,7 @@ import { messageCounts } from "./messages.mjs";
  * @property {string} name
  * @property {number} sortOrder
  * @property {boolean} collapsed
+ * @property {boolean} manualOrder DnD で手動並び替えされ、sort_order を表示順に採用するか
  * @property {Thread[]} threads
  */
 
@@ -48,7 +49,7 @@ const THREAD_COLUMNS =
 export function getBoard(db) {
   const projectRows = db
     .prepare(
-      "SELECT id, name, sort_order, collapsed, layout FROM projects ORDER BY sort_order, id",
+      "SELECT id, name, sort_order, collapsed, layout, manual_order FROM projects ORDER BY sort_order, id",
     )
     .all();
 
@@ -74,6 +75,7 @@ export function getBoard(db) {
     sortOrder: p.sort_order,
     collapsed: p.collapsed === 1,
     layout: p.layout ?? "card",
+    manualOrder: p.manual_order === 1,
     threads: byProject.get(p.id) ?? [],
   }));
 }
@@ -310,6 +312,12 @@ export function updateProject(db, id, patch) {
     },
     patch,
   );
+  // manualOrder は camelCase の API フィールドを snake_case 列に写す (buildPatch は
+  // キーをそのまま列名に使うため別扱い)。false でソートトグルから手動解除する。
+  if (patch.manualOrder !== undefined) {
+    sets.push("manual_order = ?");
+    values.push(patch.manualOrder ? 1 : 0);
+  }
   if (sets.length === 0) {
     return false;
   }
@@ -324,17 +332,21 @@ export function updateProject(db, id, patch) {
 // UPDATE を 1 文ずつ autocommit すると fsync 回数が並び替え件数分かかり遅い上、
 // 途中で例外が起きると並び順が部分適用のまま残る。全体を 1 トランザクションに包む。
 //
-// threads.sort_order はここで保存されるが、表示順の算出には使われない
-// (app.js の sortThreads() が port/updatedAt から毎回算出する。カード DnD は
-// sort:false でリスト内並び替えを無効化しているため、意味があるのは
-// projectId の付け替え = プロジェクト間移動のみ)。API 後方互換のため
-// カラム自体・payload の sortOrder フィールドは維持している。
+// threads.sort_order は手動並び替え (manualProjectIds に含まれるプロジェクト) の
+// 表示順として app.js の sortThreads("manual") で採用される。自動ソート
+// (port/newest) のプロジェクトでは sort_order は保存だけされ表示には使われない
+// (sortThreads が port/updatedAt から毎回算出するため)。
+// manualProjectIds に列挙されたプロジェクトは manual_order=1 にして、以後
+// リロード・自動更新でも手動順を維持する。
 export function reorder(db, input) {
   const projectStmt = db.prepare(
     "UPDATE projects SET sort_order = ? WHERE id = ?",
   );
   const threadStmt = db.prepare(
     "UPDATE threads SET project_id = ?, sort_order = ? WHERE id = ?",
+  );
+  const manualStmt = db.prepare(
+    "UPDATE projects SET manual_order = 1 WHERE id = ?",
   );
 
   db.exec("BEGIN");
@@ -344,6 +356,9 @@ export function reorder(db, input) {
     }
     for (const t of input.threads ?? []) {
       threadStmt.run(t.projectId, t.sortOrder, t.id);
+    }
+    for (const pid of input.manualProjectIds ?? []) {
+      manualStmt.run(pid);
     }
     db.exec("COMMIT");
   } catch (err) {

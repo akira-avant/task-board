@@ -21,6 +21,9 @@ const MEMO_FONT_DEFAULT = 14;
 const MEMO_FONT_MIN = 11;
 const MEMO_FONT_MAX = 28;
 const MEMO_FONT_STEP = 2;
+// 録音状態は本体ダイアログ (app.js) と共有する。Aqua Voice は単一トグルなので、
+// どちらかで ON/OFF したら両方の recording を揃えないと以降ずっと反転する。
+const MEMO_REC_KEY = "taskboard.memo.recording";
 let recording = false;
 
 function escapeHtml(s) {
@@ -49,10 +52,16 @@ function applyFontSize(px) {
   memoFontInc.disabled = clamped >= MEMO_FONT_MAX;
 }
 
-function setRecording(on) {
+function loadRecording() {
+  return localStorage.getItem(MEMO_REC_KEY) === "1";
+}
+// persist=false は storage イベント受信時の同期更新で使う (書き戻して無限ループを
+// 起こさないため)。ユーザー操作起点の変更のみ persist=true で本体へ共有する。
+function setRecording(on, persist = true) {
   recording = on;
   memoRec.classList.toggle("recording", on);
   memoStatus.hidden = !on;
+  if (persist) localStorage.setItem(MEMO_REC_KEY, on ? "1" : "0");
 }
 
 function loadHistory() {
@@ -191,20 +200,36 @@ window.addEventListener("storage", (e) => {
     if (!memoHistory.hidden) renderHistory();
   } else if (e.key === MEMO_FONT_KEY) {
     applyFontSize(loadFontSize());
+  } else if (e.key === MEMO_REC_KEY) {
+    // 本体ダイアログ側での録音 ON/OFF を UI に反映 (書き戻さない)。
+    setRecording(e.newValue === "1", false);
   }
 });
 
 // ウィンドウを閉じる時: 録音中なら停止し、最新のメモを保存。
+// 注意1: unload 中の素の fetch はブラウザに中断され停止トグルが届かない
+//   (= Aqua Voice が録音したまま残る) ため sendBeacon を使う。
+// 注意2: pagehide は使わない。Aqua Voice はトグル式なので、閉じる以外
+//   (フォーカス離脱・bfcache 入り等) でも発火する pagehide で余分な stop を
+//   送ると「実体=停止 / 画面=録音中」に反転し、次の停止ボタンが再開トグルに
+//   なる。閉じる意図に忠実な beforeunload だけに絞る。
 window.addEventListener("beforeunload", () => {
   if (recording) {
-    setRecording(false);
-    voiceApi("stop");
+    setRecording(false); // localStorage も false に同期 (本体ダイアログへ反映)
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/voice/stop");
+    } else {
+      voiceApi("stop");
+    }
   }
   localStorage.setItem(MEMO_KEY, memoText.value);
 });
 
 // 初期化
-setRecording(false);
+// 無条件に false にすると、録音中のままポップアウトした時に画面=停止/実体=録音へ
+// 反転し、次の録音ボタンが実際には停止トグルになって「最初の音声が録れない」。
+// 共有された実状態を復元して揃える。
+setRecording(loadRecording(), false);
 toggleHistory(false);
 applyFontSize(loadFontSize());
 memoText.value = localStorage.getItem(MEMO_KEY) ?? "";

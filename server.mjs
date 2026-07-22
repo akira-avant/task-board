@@ -36,9 +36,11 @@ const PUBLIC_DIR = path.join(__dirname, "src", "public");
 const PORT = Number(process.env.PORT) || 8111;
 
 // メモ popup の音声録音ボタン用。ブラウザ JS からは OS キーを送れないので、
-// ローカルサーバーが PowerShell を spawn して OS レベルのキー入力を送出する:
-//   "voice" → 左Alt ダブルタップ (外部アプリ Aqua Voice の起動トリガ)
-//   "stop"  → ESC (Aqua Voice 停止)
+// ローカルサーバーが PowerShell を spawn して OS レベルのキー入力を送出する。
+// Aqua Voice はトグル式なので start/stop とも同じ左Altダブルタップを送る
+// (send_keys.ps1 は Action で分岐しない):
+//   "voice" → 左Alt ダブルタップ (Aqua Voice 録音 ON へトグル)
+//   "stop"  → 左Alt ダブルタップ (Aqua Voice 録音 OFF へトグル)
 const KEY_SCRIPT = path.join(__dirname, "tools", "send_keys.ps1");
 function sendKeys(action) {
   return new Promise((resolve) => {

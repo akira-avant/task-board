@@ -157,6 +157,9 @@ const GRID_ICON =
 // 降順ソート (長→短の横棒 + 下向き矢印)。「最新を上に」の並び替えを表す。
 const SORT_ICON =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h7M4 18h3M18 4v14m0 0 3-3m-3 3-3-3"/></svg>';
+// ピン。手動並び (DnD で固定) 中であることを表す。
+const PIN_ICON =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 3 3H7l3-3z"/></svg>';
 
 const STATUS_LABEL = { run: "実行中", wait: "待機", done: "完了" };
 const STATUS_ORDER = ["run", "wait", "done"];
@@ -175,15 +178,21 @@ function whatOf(t) {
   return m ? m[1].trim() : "";
 }
 
-// 表示順は mode で決める。DnD の sort_order より優先する。
+// 表示順は mode で決める。
 //   "port"   = ポート昇順 (null 末尾、同 port は最新優先)
 //   "newest" = 最新順 (updatedAt 降順)
-// mode はフィールドごとに sortModeFor() が既定 + フリップ状態から算出する。
+//   "manual" = 手動並び (サーバの sort_order をそのまま採用。board は getBoard で
+//              既に sort_order 昇順なので追加ソート不要)
+// mode はフィールドごとに sortModeFor() が manual フラグ + 既定 + フリップ状態から算出する。
 function byNewest(a, b) {
   return (b.updatedAt || "").localeCompare(a.updatedAt || "");
 }
 function sortThreads(threads, mode = "port") {
   const ts = [...threads];
+  if (mode === "manual") {
+    // board 由来の並び (sort_order 昇順) を維持する。
+    return ts;
+  }
   if (mode === "newest") {
     ts.sort(byNewest);
   } else {
@@ -197,9 +206,10 @@ function sortThreads(threads, mode = "port") {
   return ts;
 }
 
-// フィールドの並び順モード。既定は card=ポート順 / inline=最新順。
-// ソートボタンでフリップすると card=最新順 / inline=ポート順になる。
+// フィールドの並び順モード。DnD で手動並び替えしたプロジェクトは "manual" 固定。
+// それ以外は既定 (card=ポート順 / inline=最新順) をソートボタンのフリップで反転。
 function sortModeFor(project) {
+  if (project.manualOrder) return "manual";
   const inlineDefault = (project.layout || "card") === "inline";
   const flipped = sortFlipped.has(project.id);
   const newest = inlineDefault ? !flipped : flipped;
@@ -372,12 +382,23 @@ function group(project) {
   const toggleIcon = layout === "card" ? LIST_ICON : GRID_ICON;
   const toggleLabel = layout === "card" ? "インライン表示に切替" : "カード表示に切替";
   const name = escapeHtml(project.name);
-  // ソートトグルは両レイアウトに出す。ハイライト (active) = 最新順が有効。
-  const newest = sortModeFor(project) === "newest";
-  const sortTitle = newest
-    ? "並び順: 最新順 (クリックでポート順に)"
-    : "並び順: ポート順 (クリックで最新を上に)";
-  const sortBtn = `<button class="twirl proj-sort${newest ? " active" : ""}" type="button" aria-label="${newest ? "ポート順に並び替え" : "最新順に並び替え"}" title="${sortTitle}" aria-pressed="${newest}" data-pid="${project.id}">${SORT_ICON}</button>`;
+  // ソートトグルは両レイアウトに出す。
+  //   manual = DnD で手動並び中。ピン表示。クリックで自動ソートに戻す。
+  //   active (ハイライト) = 最新順が有効。
+  const mode = sortModeFor(project);
+  const manual = mode === "manual";
+  const newest = mode === "newest";
+  const sortTitle = manual
+    ? "並び順: 手動 (クリックで自動ソートに戻す)"
+    : newest
+      ? "並び順: 最新順 (クリックでポート順に)"
+      : "並び順: ポート順 (クリックで最新を上に)";
+  const sortLabel = manual
+    ? "自動ソートに戻す"
+    : newest
+      ? "ポート順に並び替え"
+      : "最新順に並び替え";
+  const sortBtn = `<button class="twirl proj-sort${manual ? " manual" : ""}${newest ? " active" : ""}" type="button" aria-label="${sortLabel}" title="${sortTitle}" aria-pressed="${newest || manual}" data-pid="${project.id}">${manual ? PIN_ICON : SORT_ICON}</button>`;
   return `
     <section class="group${project.collapsed ? " collapsed" : ""}" data-pid="${project.id}" data-layout="${layout}">
       <div class="group-head">
@@ -433,11 +454,10 @@ function destroySortables() {
   while (sortables.length) sortables.pop().destroy();
 }
 
-// threads の sortOrder はサーバーに保存されるが、表示順は sortThreads() が
-// port / updatedAt から毎回算出するため実際には使われない (意図的)。
-// Sortable 側は sort:false でリスト内並び替えを無効化しているので、ここでの
-// index はプロジェクト間移動後の DOM 順をそのまま送っているだけ。
-// API 後方互換のためフィールド自体は残す。
+// DOM の現在順から reorder payload を組み立てる。threads の sortOrder は
+// プロジェクト内 DnD で手動並び替えしたプロジェクト (manual_order=1) の表示順
+// として sortThreads("manual") で採用される。自動ソートのプロジェクトでは
+// 保存されるだけで表示には使われない (sortThreads が再算出する)。
 function collectOrder() {
   const groupEls = [...projectsEl.querySelectorAll(":scope > .group")];
   const projects = groupEls.map((el, i) => ({
@@ -454,16 +474,33 @@ function collectOrder() {
   return { projects, threads };
 }
 
-async function persistOrder() {
-  await api.reorder(collectOrder());
+// manualProjectIds に列挙したプロジェクトはサーバ側で manual_order=1 になり、
+// 以後リロード・自動更新でも手動並びを維持する。
+async function persistOrder(manualProjectIds = []) {
+  await api.reorder({ ...collectOrder(), manualProjectIds });
 }
 
 function onDragStart() {
   dragging = true;
 }
+
+// プロジェクト自体の並び替え。手動フラグは立てない。
 async function onDragEnd() {
   try {
     await persistOrder();
+  } finally {
+    dragging = false;
+    await load();
+  }
+}
+
+// スレッド (カード/タスク) の並び替え・プロジェクト間移動。ドロップ先の
+// プロジェクトを手動並びに固定する (プロジェクト内並び替えでも、他プロジェクト
+// への挿入位置でも、その位置を保持したいのは常にドロップ先)。
+async function onThreadDragEnd(evt) {
+  const destPid = evt?.to?.dataset?.pid ? Number(evt.to.dataset.pid) : null;
+  try {
+    await persistOrder(destPid ? [destPid] : []);
   } finally {
     dragging = false;
     await load();
@@ -478,9 +515,8 @@ async function onDragEnd() {
 //   ポインタを画面端 (上端含む) に当てると自動でスクロールする。
 // - invertSwap: 背の高い要素を、より短い末尾要素の下へ落とせるようにする
 //   (デフォルトの swapThreshold だと末尾への drop が閾値を越えられない)。
-//   プロジェクト自体の並び替え (projectsEl) でのみ意味を持つ。スレッドの
-//   card-grid / task-list は sort:false でリスト内並び替え自体を無効化して
-//   いるため、この設定は実質無効 (invertSwap が効く場面が発生しない)。
+// onEnd はリストの種類ごとに分ける (プロジェクト = onDragEnd、スレッド =
+// onThreadDragEnd) ため、共通からは外して個別に指定する。
 const DND_COMMON = {
   animation: 120,
   ghostClass: "dragging",
@@ -492,7 +528,6 @@ const DND_COMMON = {
   bubbleScroll: true,
   invertSwap: true,
   onStart: onDragStart,
-  onEnd: onDragEnd,
 };
 
 function initSortables() {
@@ -505,6 +540,7 @@ function initSortables() {
       filter: ".group-actions, .count-badge",
       preventOnFilter: false,
       direction: "vertical",
+      onEnd: onDragEnd,
     }),
   );
   for (const grid of projectsEl.querySelectorAll(".card-grid")) {
@@ -512,14 +548,16 @@ function initSortables() {
       Sortable.create(grid, {
         ...DND_COMMON,
         group: "threads",
-        // sort:false = 同一プロジェクト内の並び替えは不可 (表示順は
-        // sortThreads() が port/updatedAt から決めるため並び替えても戻る)。
-        // group による他プロジェクトへの移動 (put/pull) は従来通り可能。
-        sort: false,
+        // sort:true = 同一プロジェクト内の並び替えを許可。並び替えると
+        // onThreadDragEnd がそのプロジェクトを manual_order=1 にし、以後
+        // sortThreads("manual") が sort_order の並びを維持する。
+        // group による他プロジェクトへの移動 (put/pull) も従来通り可能。
+        sort: true,
         draggable: ".agent-card",
         handle: ".ac-top",
         filter: ".ac-del, .ac-status, .ac-msg, .inline-edit",
         preventOnFilter: false,
+        onEnd: onThreadDragEnd,
       }),
     );
   }
@@ -528,12 +566,13 @@ function initSortables() {
       Sortable.create(list, {
         ...DND_COMMON,
         group: "threads",
-        // 同上: 同一プロジェクト内の並び替えは無効、プロジェクト間移動のみ可。
-        sort: false,
+        // 同上: プロジェクト内並び替え + プロジェクト間移動の両方を許可。
+        sort: true,
         draggable: ".task-item",
         handle: ".task-item",
         filter: ".task-check, .task-star, .task-expand, .inline-edit",
         preventOnFilter: false,
+        onEnd: onThreadDragEnd,
       }),
     );
   }
@@ -757,7 +796,14 @@ const MEMO_FONT_DEFAULT = 14;
 const MEMO_FONT_MIN = 11;
 const MEMO_FONT_MAX = 28;
 const MEMO_FONT_STEP = 2;
+// 録音状態は本体ダイアログ ⇔ ポップアウト (/memo.html) で共有する。Aqua Voice は
+// 単一トグルなので、片方のウィンドウで ON/OFF したらもう片方も同じ状態に揃えないと
+// JS の recording と Aqua Voice の実状態がズレて以降ずっと反転する。
+const MEMO_REC_KEY = "taskboard.memo.recording";
 let recording = false;
+// ポップアウトへ移行中は close ハンドラでの stop 送出を抑止するフラグ。
+// 録音状態はポップアウト側が localStorage 経由で引き継ぐ。
+let poppingOut = false;
 
 // メモ欄の文字サイズ (px)。localStorage に記憶し、次回開いた時も維持する。
 function loadFontSize() {
@@ -774,10 +820,16 @@ function applyFontSize(px) {
   memoFontInc.disabled = clamped >= MEMO_FONT_MAX;
 }
 
-function setRecording(on) {
+function loadRecording() {
+  return localStorage.getItem(MEMO_REC_KEY) === "1";
+}
+// persist=false は storage イベント受信時など「書き戻し不要」な同期更新で使う
+// (無限ループ防止)。ユーザー操作起点の変更は persist=true で共有する。
+function setRecording(on, persist = true) {
   recording = on;
   memoRec.classList.toggle("recording", on);
   memoStatus.hidden = !on;
+  if (persist) localStorage.setItem(MEMO_REC_KEY, on ? "1" : "0");
 }
 
 // 切り取った文章の履歴 (localStorage)。[{ text, ts(epoch ms) }] を新しい順で保持。
@@ -851,7 +903,8 @@ async function voiceApi(action) {
 
 memoBtn.addEventListener("click", () => {
   memoError.hidden = true;
-  setRecording(false);
+  // 共有された録音状態を復元 (ポップアウトで録音中のまま開いた場合に揃える)。
+  setRecording(loadRecording(), false);
   toggleHistory(false);
   applyFontSize(loadFontSize());
   memoText.value = localStorage.getItem(MEMO_KEY) ?? "";
@@ -914,6 +967,8 @@ memoHistoryBtn.addEventListener("click", () => toggleHistory());
 memoPopoutBtn.addEventListener("click", () => {
   const w = window.open("/memo.html", "taskboard-memo", "popup,width=460,height=620");
   if (w) {
+    // 録音中でも stop を送らずに閉じる。状態は localStorage 経由でポップアウトが継ぐ。
+    poppingOut = true;
     memoDialog.close();
     w.focus();
   } else {
@@ -935,6 +990,9 @@ window.addEventListener("storage", (e) => {
     if (!memoHistory.hidden) renderHistory();
   } else if (e.key === MEMO_FONT_KEY) {
     applyFontSize(loadFontSize());
+  } else if (e.key === MEMO_REC_KEY) {
+    // ポップアウト側での録音 ON/OFF を UI に反映 (書き戻さない)。
+    setRecording(e.newValue === "1", false);
   }
 });
 
@@ -955,10 +1013,12 @@ memoHistory.addEventListener("click", async (e) => {
 });
 
 memoDialog.addEventListener("close", () => {
-  if (recording) {
+  // ポップアウト移行時は録音を止めない (状態を引き継ぐ)。通常のクローズ時のみ停止。
+  if (!poppingOut && recording) {
     setRecording(false);
     voiceApi("stop");
   }
+  poppingOut = false;
   localStorage.setItem(MEMO_KEY, memoText.value);
 });
 
@@ -995,6 +1055,16 @@ projectsEl.addEventListener("click", async (e) => {
   const sortBtn = e.target.closest(".proj-sort");
   if (sortBtn) {
     const pid = Number(sortBtn.dataset.pid);
+    const proj = board.find((p) => p.id === pid);
+    if (proj?.manualOrder) {
+      // 手動並び中 → 自動ソートに戻す。フリップ状態はリセットして既定順で表示。
+      proj.manualOrder = false; // 楽観更新 (load で確定)
+      sortFlipped.delete(pid);
+      render(board);
+      await api.patchProject(pid, { manualOrder: false });
+      await load();
+      return;
+    }
     if (sortFlipped.has(pid)) sortFlipped.delete(pid);
     else sortFlipped.add(pid);
     render(board);
