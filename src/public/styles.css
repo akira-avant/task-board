@@ -1104,6 +1104,7 @@ textarea.inline-edit {
   color: var(--ink-5);
 }
 .dialog input,
+.dialog select,
 .dialog textarea {
   font-family: var(--font-body);
   font-size: 13px;
@@ -1115,7 +1116,11 @@ textarea.inline-edit {
   width: 100%;
   box-shadow: var(--shadow-hard-sm);
 }
+.dialog select {
+  cursor: pointer;
+}
 .dialog input:focus,
+.dialog select:focus,
 .dialog textarea:focus {
   outline: none;
 }

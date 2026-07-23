@@ -7,8 +7,11 @@ const livePill = document.getElementById("live-pill");
 const cardDialog = document.getElementById("card-dialog");
 const cardForm = document.getElementById("card-form");
 const cardError = document.getElementById("card-error");
-const projectList = document.getElementById("project-list");
 const fProject = document.getElementById("f-project");
+const fProjectNew = document.getElementById("f-project-new");
+// <select> で「新規プロジェクト」を選んだときの番兵値。実在プロジェクト名と
+// 衝突しない固定文字列。
+const NEW_PROJECT = "__new_project__";
 const fThread = document.getElementById("f-thread");
 const fPort = document.getElementById("f-port");
 const fCurrent = document.getElementById("f-current");
@@ -691,10 +694,21 @@ function startInlineEdit(el) {
 }
 
 /* ---- dialogs ---- */
+// プロジェクト <select> に現存する全プロジェクト + 「新規」オプションを並べる。
 function fillProjectList() {
-  projectList.innerHTML = board
-    .map((p) => `<option value="${escapeHtml(p.name)}"></option>`)
+  const options = board
+    .map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`)
     .join("");
+  fProject.innerHTML =
+    options + `<option value="${NEW_PROJECT}">＋ 新しいプロジェクト…</option>`;
+}
+
+// select の値に応じて新規プロジェクト名の入力欄を出し入れする。
+function syncNewProjectInput() {
+  const isNew = fProject.value === NEW_PROJECT;
+  fProjectNew.hidden = !isNew;
+  if (isNew) fProjectNew.focus();
+  else fProjectNew.value = "";
 }
 
 function openCardDialog(data = {}) {
@@ -703,7 +717,16 @@ function openCardDialog(data = {}) {
   const layout = data.layout ?? "card";
   const radio = cardForm.querySelector(`input[name=layout][value="${layout}"]`);
   if (radio) radio.checked = true;
-  fProject.value = data.project ?? "benchmark_app";
+  // 既定は data.project → benchmark_app → 先頭プロジェクト の優先順で選択。
+  // いずれも実在しなければ「新規」に落とす。
+  const want = data.project ?? "benchmark_app";
+  const exists = (name) => board.some((p) => p.name === name);
+  fProject.value = exists(want)
+    ? want
+    : board.length
+      ? board[0].name
+      : NEW_PROJECT;
+  syncNewProjectInput();
   fThread.value = "";
   fPort.value = data.port ?? 3111;
   fCurrent.value = "";
@@ -716,10 +739,13 @@ function openCardDialog(data = {}) {
 
 async function submitCard(e) {
   e.preventDefault();
-  const project = fProject.value.trim();
+  const project =
+    fProject.value === NEW_PROJECT
+      ? fProjectNew.value.trim()
+      : fProject.value.trim();
   const thread = fThread.value.trim();
   if (!project || !thread) {
-    cardError.textContent = "プロジェクトとスレッドは必須です";
+    cardError.textContent = "プロジェクトと ID は必須です";
     cardError.hidden = false;
     return;
   }
@@ -768,6 +794,7 @@ async function patchThread(id, body) {
 
 /* ---- events ---- */
 addBtn.addEventListener("click", () => openCardDialog());
+fProject.addEventListener("change", syncNewProjectInput);
 cardForm.addEventListener("submit", submitCard);
 projectForm.addEventListener("submit", submitProject);
 

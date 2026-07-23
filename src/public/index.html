@@ -81,12 +81,12 @@
         </fieldset>
         <label>
           プロジェクト
-          <input id="f-project" name="project" list="project-list" required
-            autocomplete="off" placeholder="例: benchmark_app" />
-          <datalist id="project-list"></datalist>
+          <select id="f-project" name="project" required></select>
+          <input id="f-project-new" name="project-new" hidden autocomplete="off"
+            placeholder="新しいプロジェクト名" />
         </label>
         <label>
-          スレッド
+          ID
           <input id="f-thread" name="thread" required autocomplete="off"
             placeholder="例: main" />
         </label>
@@ -96,7 +96,7 @@
             placeholder="例: 3000" />
         </label>
         <label>
-          Current <span class="opt">(任意)</span>
+          Current or Title <span class="opt">(任意)</span>
           <textarea id="f-current" name="current" rows="2"></textarea>
         </label>
         <label>
