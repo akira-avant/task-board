@@ -56,6 +56,8 @@ export function parsePostThread(body) {
       memo: trimOrNull(body.memo),
       sessionId: trimOrNull(body.sessionId),
       worktree: trimOrNull(body.worktree),
+      agentName: trimOrNull(body.agentName),
+      threadAuto: body.threadAuto === true,
       layout,
       status,
     },
@@ -193,61 +195,3 @@ export function parseReorder(body) {
   return { data: { projects, threads, manualProjectIds } };
 }
 
-const MAX_MESSAGE_BODY = 4000;
-
-export function parsePostMessage(body) {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { error: "body must be a JSON object" };
-  }
-  const fields = {};
-  for (const key of ["fromProject", "fromThread"]) {
-    const v = typeof body[key] === "string" ? body[key].trim() : "";
-    if (!v) {
-      return { error: `${key} は必須です` };
-    }
-    fields[key] = v;
-  }
-  // 宛先は (toProject + toThread) か、その別名 toSessionId のいずれか。
-  const toSessionId = trimOrNull(body.toSessionId);
-  const toProject =
-    typeof body.toProject === "string" ? body.toProject.trim() : "";
-  const toThread =
-    typeof body.toThread === "string" ? body.toThread.trim() : "";
-  if (toSessionId) {
-    fields.toSessionId = toSessionId;
-  } else if (toProject && toThread) {
-    fields.toProject = toProject;
-    fields.toThread = toThread;
-  } else {
-    return { error: "宛先は toProject+toThread か toSessionId が必要です" };
-  }
-  const text = typeof body.body === "string" ? body.body.trim() : "";
-  if (!text) {
-    return { error: "body (本文) は必須です" };
-  }
-  if (text.length > MAX_MESSAGE_BODY) {
-    return { error: `body は ${MAX_MESSAGE_BODY} 文字以内` };
-  }
-  let replyTo = null;
-  if (body.replyTo !== undefined && body.replyTo !== null) {
-    if (
-      typeof body.replyTo !== "number" ||
-      !Number.isInteger(body.replyTo) ||
-      body.replyTo <= 0
-    ) {
-      return { error: "replyTo は正の整数" };
-    }
-    replyTo = body.replyTo;
-  }
-  return { data: { ...fields, body: text, replyTo } };
-}
-
-export function parseUpdateMessage(body) {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { error: "body must be a JSON object" };
-  }
-  if (body.read !== true) {
-    return { error: "read: true のみ受け付けます" };
-  }
-  return { data: { read: true } };
-}

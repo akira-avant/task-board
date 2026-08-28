@@ -304,6 +304,34 @@ describe("validate", () => {
     assert.equal(r.data.project, "p");
     assert.equal(r.data.thread, "t");
   });
+
+  it("agentName は trim され、空なら null", () => {
+    const r = parsePostThread({
+      project: "p",
+      thread: "t",
+      agentName: " benchmark-app-14 ",
+    });
+    assert.equal(r.data.agentName, "benchmark-app-14");
+    const empty = parsePostThread({ project: "p", thread: "t", agentName: " " });
+    assert.equal(empty.data.agentName, null);
+  });
+
+  it("threadAuto は boolean true のみ true、それ以外は false", () => {
+    assert.equal(
+      parsePostThread({ project: "p", thread: "t", threadAuto: true }).data
+        .threadAuto,
+      true,
+    );
+    assert.equal(
+      parsePostThread({ project: "p", thread: "t", threadAuto: "yes" }).data
+        .threadAuto,
+      false,
+    );
+    assert.equal(
+      parsePostThread({ project: "p", thread: "t" }).data.threadAuto,
+      false,
+    );
+  });
 });
 
 describe("session id (再開用)", () => {
@@ -333,6 +361,182 @@ describe("session id (再開用)", () => {
 
   it("sessionId 無しは null (後方互換)", () => {
     assert.equal(post(db, { project: "p", thread: "t" }).sessionId, null);
+  });
+});
+
+describe("agent name (SendMessage 宛先)", () => {
+  let db;
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  it("Post 時に agentName を保存し getBoard が返す", () => {
+    post(db, { project: "p", thread: "t", agentName: "benchmark-app-14" });
+    assert.equal(getBoard(db)[0].threads[0].agentName, "benchmark-app-14");
+  });
+
+  it("agentName 省略の再 Post で既存値は維持される (COALESCE)", () => {
+    post(db, { project: "p", thread: "t", agentName: "benchmark-app-14" });
+    post(db, { project: "p", thread: "t", current: "更新" });
+    assert.equal(getBoard(db)[0].threads[0].agentName, "benchmark-app-14");
+  });
+
+  it("agentName 明示の再 Post で更新される", () => {
+    post(db, { project: "p", thread: "t", agentName: "old-name" });
+    post(db, { project: "p", thread: "t", agentName: "new-name" });
+    assert.equal(getBoard(db)[0].threads[0].agentName, "new-name");
+  });
+
+  it("agentName 無しは null (後方互換)", () => {
+    assert.equal(post(db, { project: "p", thread: "t" }).agentName, null);
+  });
+});
+
+describe("セッション単位のカード統合 (threadAuto)", () => {
+  let db;
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  const SID = "f2cf1142-0000-4000-8000-000000000000";
+
+  it("branch 切替 (auto thread 変更) で既存カードがリネームされ、新カードを作らない", () => {
+    const a = post(db, {
+      project: "p",
+      thread: "feature/x",
+      sessionId: SID,
+      threadAuto: true,
+      current: "v1",
+    });
+    const b = post(db, {
+      project: "p",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+      current: "v2",
+    });
+    assert.equal(b.id, a.id, "同一カードを引き継ぐ (id 不変)");
+    const threads = getBoard(db).find((p) => p.name === "p").threads;
+    assert.equal(threads.length, 1);
+    assert.equal(threads[0].threadKey, "feature/y");
+    assert.equal(threads[0].current, "v2");
+  });
+
+  it("リネーム統合で starred / done は維持される", () => {
+    const a = post(db, {
+      project: "p",
+      thread: "feature/x",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    updateThread(db, a.id, { starred: true });
+    post(db, {
+      project: "p",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    assert.equal(getBoard(db)[0].threads[0].starred, true);
+  });
+
+  it("threadAuto 無し (明示 thread) は同セッションでも統合しない", () => {
+    post(db, { project: "p", thread: "worker", sessionId: SID });
+    post(db, {
+      project: "p",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    const threads = getBoard(db).find((p) => p.name === "p").threads;
+    assert.equal(threads.length, 2, "明示カードは別カードのまま");
+  });
+
+  it("auto カードでも明示 thread の Post は統合対象から外れる (explicit へ降格)", () => {
+    // auto で作られたカードに同じ thread 名で明示 Post → 以後は explicit 扱い
+    post(db, {
+      project: "p",
+      thread: "feature/x",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    post(db, { project: "p", thread: "feature/x", sessionId: SID });
+    post(db, {
+      project: "p",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    const keys = getBoard(db)[0].threads.map((t) => t.threadKey).sort();
+    assert.deepEqual(keys, ["feature/x", "feature/y"]);
+  });
+
+  it("別セッションの auto カードは統合しない", () => {
+    post(db, {
+      project: "p",
+      thread: "feature/x",
+      sessionId: "other-session",
+      threadAuto: true,
+    });
+    post(db, {
+      project: "p",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    assert.equal(getBoard(db)[0].threads.length, 2);
+  });
+
+  it("sessionId 無しの auto Post は統合しない (新カード)", () => {
+    post(db, { project: "p", thread: "feature/x", threadAuto: true });
+    post(db, { project: "p", thread: "feature/y", threadAuto: true });
+    assert.equal(getBoard(db)[0].threads.length, 2);
+  });
+
+  it("別プロジェクトの同セッションカードは統合しない", () => {
+    post(db, {
+      project: "p1",
+      thread: "feature/x",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    post(db, {
+      project: "p2",
+      thread: "feature/y",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    assert.equal(getBoard(db).length, 2);
+  });
+
+  it("同セッションの auto カードが複数残っていたら最新を残し他を「削除済み」へ退避", () => {
+    // 統合機能導入前の残骸を模す: 直接 2 枚目を作って thread_auto を立てる
+    const a = post(db, {
+      project: "p",
+      thread: "feature/old",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    db.prepare(
+      "INSERT INTO threads (project_id, thread_key, session_id, thread_auto, sort_order, updated_at) VALUES (?, ?, ?, 1, 99, datetime('now', '+1 minute'))",
+    ).run(a.projectId, "feature/mid", SID);
+
+    post(db, {
+      project: "p",
+      thread: "feature/new",
+      sessionId: SID,
+      threadAuto: true,
+    });
+    const byName = Object.fromEntries(getBoard(db).map((p) => [p.name, p]));
+    assert.deepEqual(
+      byName.p.threads.map((t) => t.threadKey),
+      ["feature/new"],
+    );
+    const archive = byName[ARCHIVE_PROJECT_NAME];
+    assert.ok(archive, "退避先が作られる");
+    assert.deepEqual(
+      archive.threads.map((t) => t.threadKey),
+      ["p/feature/old"],
+    );
   });
 });
 

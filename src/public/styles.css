@@ -1439,83 +1439,12 @@ textarea.inline-edit {
   color: var(--ok);
 }
 
-/* ---- messages (エージェント間メッセージ) ---- */
-.ac-msg {
-  border: 1px solid var(--paper-edge);
-  background: transparent;
-  color: var(--ink-4);
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 8px;
-  cursor: pointer;
-  flex: none;
-}
-.ac-msg:hover {
-  border-color: var(--ink-5);
-  color: var(--ink-2);
-}
-.ac-msg.has-unread {
-  color: var(--red-2);
-  border-color: var(--red);
-  background: var(--red-bg);
-  font-weight: 600;
-}
-.msg-panel {
-  margin-top: 6px;
-  border-top: 1px solid var(--paper-edge);
-  padding-top: 6px;
-  display: grid;
-  gap: 4px;
-}
-.msg-empty {
-  color: var(--ink-5);
-  font-size: 11px;
-  padding: 2px 4px;
-}
-.msg-item {
-  background: var(--paper-2);
-  border-radius: var(--r-md);
-  padding: 5px 8px;
-}
-.msg-item.unread {
-  background: var(--red-bg);
-  box-shadow: inset 2px 0 0 var(--red);
-}
-.msg-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  color: var(--ink-4);
-  margin-bottom: 2px;
-}
-.msg-dir {
-  font-weight: 700;
-}
-.msg-peer {
-  font-weight: 600;
-  color: var(--ink-3);
-}
-.msg-time {
-  margin-left: auto;
-}
-.msg-flag {
-  color: var(--red-2);
-  font-weight: 700;
-}
-.msg-body {
-  font-size: 12px;
-  color: var(--ink-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ---- card ID (メッセージ宛先) ---- */
+/* ---- card ID / SendMessage 宛先 ---- */
 .ac-wt-k2 {
   margin-left: 8px;
 }
 .ac-id,
+.ac-agent,
 .ac-resume {
   background: transparent;
   border: 0;
@@ -1525,15 +1454,21 @@ textarea.inline-edit {
   text-align: left;
   cursor: copy;
 }
+.ac-agent {
+  color: var(--ink-3);
+  font-weight: 600;
+}
 .ac-resume {
   flex-shrink: 0;
   color: var(--ink-3);
 }
 .ac-id:hover,
+.ac-agent:hover,
 .ac-resume:hover {
   text-decoration: underline;
 }
 .ac-id.copied,
+.ac-agent.copied,
 .ac-resume.copied {
   color: var(--ok);
 }

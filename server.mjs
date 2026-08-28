@@ -9,24 +9,14 @@ import {
   getBoard,
   pruneEmptyProjects,
   reorder,
-  threadExists,
   updateProject,
   updateThread,
   upsertThread,
 } from "./src/lib/board.mjs";
 import { getDb } from "./src/lib/db.mjs";
 import {
-  listConversation,
-  listInbox,
-  markMessageRead,
-  resolveCard,
-  sendMessage,
-} from "./src/lib/messages.mjs";
-import {
-  parsePostMessage,
   parsePostThread,
   parseReorder,
-  parseUpdateMessage,
   parseUpdateProject,
   parseUpdateThread,
 } from "./src/lib/validate.mjs";
@@ -196,62 +186,6 @@ async function handleApi(req, res, url) {
       return;
     }
     reorder(db, data);
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-
-  if (req.method === "POST" && pathname === "/api/messages") {
-    const data = await withJson(req, res, parsePostMessage);
-    if (data === null) {
-      return;
-    }
-    const result = sendMessage(db, data);
-    if (result.error) {
-      sendJson(res, result.status, { error: result.error });
-      return;
-    }
-    sendJson(res, 200, { message: result.message });
-    return;
-  }
-
-  if (req.method === "GET" && pathname === "/api/messages") {
-    const project = (url.searchParams.get("project") ?? "").trim();
-    const thread = (url.searchParams.get("thread") ?? "").trim();
-    if (!project || !thread) {
-      sendJson(res, 400, { error: "project / thread クエリは必須です" });
-      return;
-    }
-    const cardRow = resolveCard(db, project, thread);
-    if (!cardRow) {
-      sendJson(res, 404, { error: `カード "${project}/${thread}" がありません` });
-      return;
-    }
-    const unreadOnly = url.searchParams.get("unread") === "1";
-    sendJson(res, 200, { messages: listInbox(db, cardRow.id, { unreadOnly }) });
-    return;
-  }
-
-  const threadMessagesMatch = pathname.match(/^\/api\/threads\/(\d+)\/messages$/);
-  if (req.method === "GET" && threadMessagesMatch) {
-    const id = Number(threadMessagesMatch[1]);
-    if (!threadExists(db, id)) {
-      sendJson(res, 404, { error: "not found" });
-      return;
-    }
-    sendJson(res, 200, { messages: listConversation(db, id) });
-    return;
-  }
-
-  const messageMatch = pathname.match(/^\/api\/messages\/(\d+)$/);
-  if (req.method === "PATCH" && messageMatch) {
-    const data = await withJson(req, res, parseUpdateMessage);
-    if (data === null) {
-      return;
-    }
-    if (!markMessageRead(db, Number(messageMatch[1]))) {
-      sendJson(res, 404, { error: "not found" });
-      return;
-    }
     sendJson(res, 200, { ok: true });
     return;
   }

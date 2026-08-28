@@ -20,7 +20,9 @@
 | `current` | — | string | 今やっていること。 |
 | `next`    | — | string | 次にやること。 |
 | `memo`    | — | string | 補足 (PR 番号・ブロッカー等)。 |
-| `sessionId` | — | string | このカードの作業をしている Claude セッションの ID (`CLAUDE_CODE_SESSION_ID`)。ボードの「⟳再開」で `claude -r <id>` をコピーでき、`/api/messages` の宛先別名 `toSessionId` にもなる。省略時は既存値を維持 (COALESCE)。 |
+| `sessionId` | — | string | このカードの作業をしている Claude セッションの ID (`CLAUDE_CODE_SESSION_ID`)。ボードの「⟳再開」で `claude -r <id>` をコピーできる。省略時は既存値を維持 (COALESCE)。 |
+| `agentName` | — | string | Claude の SendMessage 宛先名 (`ListAgents` に出るセッション名)。カードの「宛先」ボタンからコピーでき、`SendMessage({ to: agentName })` にそのまま渡せる。デスクトップアプリのセッションタイトルとは別物 (タイトル変更には追従しない) なので、Post 時に都度 `ListAgents` で確認した最新値を渡すこと。省略時は既存値を維持 (COALESCE)。 |
+| `threadAuto` | — | boolean | `thread` が worktree の branch 名から自動導出された値かどうか。`true` かつ `sessionId` 付きで送ると、同一 `(project, sessionId)` の既存 auto カードへリネーム統合され、branch 切替のたびに別カードが増えるのを防げる。明示的に指定した `thread` では省略する (既定 `false`)。 |
 
 **upsert される**: 同じ `(project, thread)` に再 Post すると**上書き更新**。`project` は無ければ自動作成。
 だから「節目ごとに最新状態を上書き投稿」で OK。履歴は残らない (最新のみ)。

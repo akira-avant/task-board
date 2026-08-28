@@ -36,10 +36,6 @@ node server.mjs        # または npm start  → http://localhost:8111
 | `DELETE` | `/api/threads/:id` | カード削除 |
 | `PATCH` | `/api/projects/:id` | 折りたたみ等の更新 |
 | `POST` | `/api/board/reorder` | 並べ替えの永続化 (UI 用) |
-| `POST` | `/api/messages` | エージェント間メッセージ送信 (宛先/送信元カード必須) |
-| `GET`  | `/api/messages?project=X&thread=Y&unread=1` | 指定カード宛メッセージ取得 |
-| `GET`  | `/api/threads/:id/messages` | カードの会話ログ (送受信両方向) |
-| `PATCH` | `/api/messages/:id` | `{"read":true}` で既読化 |
 
 ### 進捗を Post する
 
@@ -58,10 +54,20 @@ curl -X POST localhost:8111/api/threads \
   }'
 ```
 
-`project` と `thread` が必須、`port` / `current` / `next` / `memo` は任意。
+`project` と `thread` が必須、`port` / `current` / `next` / `memo` / `agentName` / `threadAuto` は任意。
 
 `thread` キーの運用: セッション固有 ID を入れると 1 セッション = 1 カード、用途名
 (`main` / `worker` 等) を入れると同じカードを更新し続ける。プロジェクト内で一意ならどちらでも可。
+
+`thread` を worktree の branch 名から自動導出している場合は `threadAuto: true` と
+`sessionId` を併せて送ると、branch 切替 (= thread 変更) の度に別カードが増えるのを防げる。
+同一 `(project, sessionId)` の auto カードが既にあれば新規作成せずそのカードの `thread`
+をリネームして使い回す (明示的に `thread` を指定した Post は対象外)。
+
+`agentName` は Claude の SendMessage 宛先名 (ListAgents に出るセッション名)。カードの
+「宛先」ボタンからクリックコピーでき、`SendMessage({ to: "<agentName>" })` にそのまま渡せる。
+セッション名はデスクトップアプリのタイトルとは別物 (タイトル変更に追従しない) なので、
+`agentName` は Post のたびに ListAgents で確認した最新値を渡すこと。
 
 ### ヘルパ (任意)
 

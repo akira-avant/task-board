@@ -68,8 +68,6 @@ const api = {
       headers: JSON_H,
       body: JSON.stringify(body),
     }),
-  conversation: (id) =>
-    fetch(`/api/threads/${id}/messages`, { cache: "no-store" }),
 };
 
 let dragging = false;
@@ -85,8 +83,6 @@ const cardExpanded = new Set();
 // 並び順を既定からフリップしたプロジェクト id 集合。
 // 既定は card=ポート順 / inline=最新順。フリップで card=最新順 / inline=ポート順。
 const sortFlipped = new Set();
-const msgExpanded = new Set();
-const msgCache = new Map(); // threadId -> Message[]
 
 function escapeHtml(s) {
   return String(s)
@@ -244,26 +240,6 @@ function cardExtra(t) {
   </div>`;
 }
 
-function messagePanel(t) {
-  const msgs = msgCache.get(t.id) ?? [];
-  if (msgs.length === 0) {
-    return '<div class="msg-panel"><div class="msg-empty">メッセージはありません</div></div>';
-  }
-  const items = msgs
-    .map((m) => {
-      const inbound = m.to.threadId === t.id;
-      const peer = inbound ? m.from : m.to;
-      const dir = inbound ? "←" : "→";
-      const unread = inbound && !m.readAt;
-      return `<div class="msg-item${unread ? " unread" : ""}">
-        <div class="msg-head"><span class="msg-dir">${dir}</span><span class="msg-peer">${escapeHtml(`${peer.project}/${peer.thread}`)}</span><span class="msg-time">${relativeTime(m.createdAt)}</span>${unread ? '<span class="msg-flag">未読</span>' : ""}</div>
-        <div class="msg-body">${richText(escapeHtml(m.body))}</div>
-      </div>`;
-    })
-    .join("");
-  return `<div class="msg-panel">${items}</div>`;
-}
-
 function agentCard(t, projectName) {
   const status = statusOf(t);
   const port = t.port ? `:${t.port}` : "—";
@@ -273,6 +249,11 @@ function agentCard(t, projectName) {
     ? `<span class="ac-what" title="${escapeHtml(what)}">${escapeHtml(what)}</span>`
     : "";
   const addr = `${projectName}/${t.threadKey}`;
+  // SendMessage の宛先はセッション名 (agentName) であって project/thread ではないため、
+  // 別ボタンとして分けてコピーできるようにする (無ければ非表示)。
+  const agent = t.agentName
+    ? `<span class="ac-wt-k ac-wt-k2">宛先</span><button class="ac-wt-v ac-agent" type="button" title="クリックで SendMessage 宛先名 (${escapeHtml(t.agentName)}) をコピー" data-copy="${escapeHtml(t.agentName)}">${escapeHtml(t.agentName)}</button>`
+    : "";
   const resume = t.sessionId
     ? `<button class="ac-wt-v ac-resume ac-wt-k2" type="button" title="クリックで再開コマンド (claude -r ${escapeHtml(t.sessionId)}) をコピー" data-copy="claude -r ${escapeHtml(t.sessionId)}">⟳再開</button>`
     : "";
@@ -281,11 +262,7 @@ function agentCard(t, projectName) {
   // ホバーで全体が読めるよう title 属性に生の値を入れる。
   const wtName = t.worktree ?? t.threadKey;
   const wt = wtName
-    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v" title="${escapeHtml(wtName)}">${escapeHtml(wtName)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="${escapeHtml(addr)}（クリックで宛先 ID をコピー）" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button>${resume}</div>`
-    : "";
-  const msgOpen = msgExpanded.has(t.id);
-  const msgBadge = t.messageCount
-    ? `<button class="ac-msg${t.unreadCount ? " has-unread" : ""}${msgOpen ? " open" : ""}" type="button" title="メッセージ" aria-label="メッセージ" data-msg="${t.id}">✉${t.unreadCount ? ` ${t.unreadCount}` : ""}</button>`
+    ? `<div class="ac-wt"><span class="ac-wt-k">worktree</span><span class="ac-wt-v" title="${escapeHtml(wtName)}">${escapeHtml(wtName)}</span><span class="ac-wt-k ac-wt-k2">ID</span><button class="ac-wt-v ac-id" type="button" title="${escapeHtml(addr)}（クリックでカード ID をコピー）" data-copy="${escapeHtml(addr)}">${escapeHtml(addr)}</button>${agent}${resume}</div>`
     : "";
   return `
     <div class="agent-card" data-tid="${t.id}">
@@ -293,7 +270,6 @@ function agentCard(t, projectName) {
         <span class="ac-status ${status}" title="クリックで状態変更 (実行中→待機→完了)"><span class="d"></span>${STATUS_LABEL[status]}</span>
         <span class="port-tag"><span class="port">${escapeHtml(port)}</span></span>
         ${whatEl}
-        ${msgBadge}
         <span class="ac-time">${relativeTime(t.updatedAt)}</span>
         <button class="ac-del" type="button" aria-label="削除" data-del="${t.id}">${TRASH}</button>
       </div>
@@ -301,7 +277,6 @@ function agentCard(t, projectName) {
       ${wt}
       <button class="ac-more${open ? " open" : ""}" type="button" data-more="${t.id}"><span class="tw">${CHEV_RIGHT}</span>Next・Memo</button>
       ${open ? cardExtra(t) : ""}
-      ${msgOpen ? messagePanel(t) : ""}
     </div>`;
 }
 
@@ -558,7 +533,7 @@ function initSortables() {
         sort: true,
         draggable: ".agent-card",
         handle: ".ac-top",
-        filter: ".ac-del, .ac-status, .ac-msg, .inline-edit",
+        filter: ".ac-del, .ac-status, .inline-edit",
         preventOnFilter: false,
         onEnd: onThreadDragEnd,
       }),
@@ -604,40 +579,16 @@ function updateLastUpdated() {
   stamp.textContent = `最終更新 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-async function fetchConversation(id) {
-  try {
-    const res = await api.conversation(id);
-    if (res.ok) msgCache.set(id, (await res.json()).messages);
-  } catch {
-    // offline 中は既存キャッシュを表示し続ける
-  }
-}
-
-async function toggleMessages(id) {
-  if (msgExpanded.has(id)) {
-    msgExpanded.delete(id);
-  } else {
-    msgExpanded.add(id);
-    await fetchConversation(id);
-  }
-  render(board);
-}
-
 async function load() {
   const res = await api.getBoard();
   if (!res.ok) return;
   const data = await res.json();
   board = data.projects;
-  // 開いている会話ログは 5 秒自動更新に合わせて再取得する
-  await Promise.all([...msgExpanded].map(fetchConversation));
-  // board / 検索クエリ / 開いている会話ログの内容が前回ポーリング時と完全に一致するなら
-  // render (innerHTML 全再構築 + Sortable 再生成) をスキップし、DnD やホバー状態を保つ。
-  // render() は検索欄・メッセージ展開・Next/Memo展開などの UI 操作からも直接呼ばれるが、
-  // それらは常に即再描画したいのでこのスキップ判定を経由しない (load() 専用)。
-  const msgSnapshot = [...msgExpanded]
-    .sort((a, b) => a - b)
-    .map((id) => [id, msgCache.get(id)]);
-  const renderKey = JSON.stringify([board, query, msgSnapshot]);
+  // board / 検索クエリの内容が前回ポーリング時と完全に一致するなら render (innerHTML
+  // 全再構築 + Sortable 再生成) をスキップし、DnD やホバー状態を保つ。render() は検索欄・
+  // Next/Memo展開などの UI 操作からも直接呼ばれるが、それらは常に即再描画したいので
+  // このスキップ判定を経由しない (load() 専用)。
+  const renderKey = JSON.stringify([board, query]);
   if (renderKey !== lastRenderKey) {
     render(board);
     lastRenderKey = renderKey;
@@ -1135,11 +1086,6 @@ projectsEl.addEventListener("click", async (e) => {
       STATUS_ORDER.find((s) => statusBtn.classList.contains(s)) || "run";
     const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % 3];
     await patchThread(id, { status: next });
-    return;
-  }
-  const msgBtn = e.target.closest(".ac-msg");
-  if (msgBtn) {
-    await toggleMessages(Number(msgBtn.dataset.msg));
     return;
   }
   const more = e.target.closest(".ac-more");
